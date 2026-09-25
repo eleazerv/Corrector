@@ -7,11 +7,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel 
 from supabase import AsyncClient
 
-from backend.core.config import settings 
-from backend.core.errors import AppError, forbidden 
-from backend.core.security import verify_supabase_token
+from core.config import settings 
+from core.errors import AppError, forbidden 
+from core.security import verify_supabase_token
 
-from backend.db.pool import as_user
+from db.pool import as_user
  
 def get_supabase(request: Request) -> AsyncClient:
     return request.app.state.supabase

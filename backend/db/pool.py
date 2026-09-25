@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from uuid import UUID 
 import asyncpg 
 
-from backend.core.config import settings 
+from core.config import settings 
 
 
 async def _init_conn(conn:asyncpg.Connection) -> None : 

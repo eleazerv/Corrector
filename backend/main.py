@@ -8,11 +8,11 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.core.config import settings
-from backend.core.errors import register_error_handlers
-from backend.core.logging import setup_logging
-from backend.core.middleware import request_context_middleware
-from backend.db.pool import create_db_pool
+from core.config import settings
+from core.errors import register_error_handlers
+from core.logging import setup_logging
+from core.middleware import request_context_middleware
+from db.pool import create_db_pool
 
 
 

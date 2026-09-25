@@ -4,8 +4,8 @@ from uuid import uuid4
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from backend.core.logging import log
-from backend.core.errors import _body
+from core.logging import log
+from core.errors import _body
 
 _RID_RE = re.compile(r"^[A-Za-z0-9\-]{1,64}$")
 

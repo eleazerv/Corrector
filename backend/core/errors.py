@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from backend.core.logging import log 
+from core.logging import log 
 
 class AppError (Exception) : 
     def __init__(self, code : str , message : str , status : int = 400 , details= None) : 

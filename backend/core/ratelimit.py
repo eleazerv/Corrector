@@ -1,8 +1,8 @@
 import time 
 from fastapi import Depends , Request 
 
-from backend.core.deps import CurrentUser , get_current_user , get_redis 
-from backend.core.errors import AppError , forbidden
+from core.deps import CurrentUser , get_current_user , get_redis 
+from core.errors import AppError , forbidden
 
 def rate_limit (group: str , limit: int , window_sec: int = 60) : 
    # rate limit biasa ( harus udah login ) apply ke router yg perlu login 
