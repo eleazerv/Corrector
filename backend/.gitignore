@@ -1,0 +1,5 @@
+.env
+venv/
+venv-ocr/
+__pycache__/
+samples/
