@@ -1,5 +1,16 @@
-.env
+# Virtual environment
+.venv/
 venv/
-venv-ocr/
+
+# Python cache
 __pycache__/
-samples/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
