@@ -22,6 +22,9 @@ import os
 from dataclasses import asdict
 import time
 from pathlib import Path
+import sys 
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png"}
 ROOT = Path(__file__).resolve().parent.parent      # root project (folder di atas scripts/)
@@ -73,7 +76,7 @@ async def main(target: str, provider_name: str | None, draw: bool):
         os.environ["OCR_PROVIDER"] = provider_name
 
 
-    from backend.providers.ocr import get_ocr_provider 
+    from providers.ocr import get_ocr_provider 
     files = _collect(_resolve(target))
     if not files:
         print("tidak ada gambar ditemukan")
@@ -130,7 +133,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("target", nargs="?", default=DEFAULT_IMAGE,
                     help=f"file/folder gambar (default: samples/{DEFAULT_IMAGE})")
-    ap.add_argument("--provider", choices=["local", "api", "fake"], help="timpa OCR_PROVIDER di .env")
+    ap.add_argument("--provider", choices=[ "api", "fake"], help="timpa OCR_PROVIDER di .env")
     ap.add_argument("--no-draw", action="store_true", help="jangan buat gambar bbox")
     args = ap.parse_args()
     asyncio.run(main(args.target, args.provider, not args.no_draw))

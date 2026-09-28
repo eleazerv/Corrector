@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     
     SUPABASE_KEY : str
     SUPABASE_URL : str 
-    SUPASBASE_BUCKET : str 
+    SUPABASE_BUCKET : str 
     WORKER_TOKEN : str = Field(min_length=32)
     
     LLM_PROVIDER : str 
