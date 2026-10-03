@@ -75,7 +75,7 @@ async def main(keep: bool):
             print(f"--keep: data seed disimpan (tag={ids['tag']})")
         else:
             await cleanup(pool, storage, ids)
-        await redis.close()
+        await redis.aclose()
         await pool.close()
     sys.exit(0 if ok else 1)
 

@@ -5,6 +5,9 @@ from core.config import settings
 from core.logging import log, setup_logging
 from core.queues import DEFAULT_QUEUE,OCR_QUEUE
 from db.pool import create_db_pool
+from pipeline.checkpoint import create_checkpointer
+from providers.embedding import get_embedding_provider
+from providers.llm import get_llm_provider
 from providers.ocr import get_ocr_provider 
 from providers.storage import get_storage_provider 
 
@@ -12,7 +15,7 @@ from providers.storage import get_storage_provider
 from tasks.build_trait import build_trait
 from tasks.grade_student import grade_student
 from tasks.ingest_zip import ingest_zip
-from tasks.maintenance import reconcile_status, refresh_plans, requeue_stuck
+from tasks.maintenance import reconcile_status, refresh_plans, requeue_stuck , sweep_checkpoints
 from tasks.ocr_page import MAX_TRIES as OCR_MAX_TRIES
 from tasks.ocr_page import ocr_page
 from tasks.summarize_complaint import summarize_complaint
@@ -23,7 +26,11 @@ REDIS = RedisSettings.from_dsn(settings.REDIS_URL)
 DEFAULT_MAX_JOBS = 10 
 OCR_MAX_JOBS = 1 
 
+import asyncio
+import sys
 
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 async def _init_common (ctx: dict, pool_size: int) -> None : 
     """ worker perlu semua : logging , DB , supabase , storage"""
@@ -44,17 +51,25 @@ async def startup(ctx: dict) -> None:
     """Dipanggil sekali saat worker umum start."""
     await _init_common(ctx, pool_size=DEFAULT_MAX_JOBS)
     ctx["llm_semaphore"] = asyncio.Semaphore(settings.LLM_CONCURRENCY)
-    ctx["llm"] = None            # TODO: get_llm_provider()
-    ctx["embedder"] = None       # TODO: get_embedding_provider()
-    ctx["checkpointer"] = None   # TODO: LangGraph Postgres checkpointer
+    ctx["llm"] = get_llm_provider()     
+    await ctx["llm"].start()     
+    ctx["embedder"] =get_embedding_provider()
+    await ctx["embedder"].start()
+    ctx["checkpointer"], ctx["checkpointer_close"] = await create_checkpointer(
+        settings.LANGGRAPH_CHECKPOINT, settings.DATABASE_URL)
     log.info("worker started queue=%s max_jobs=%s", DEFAULT_QUEUE, DEFAULT_MAX_JOBS)
      
     
 
 async def shutdown(ctx: dict) -> None:
     """ dipanggil saat mo tutup worker""" 
-    #TODO: tutup checkpointer 
-    #TODO: tutup client llm/embedder 
+    close_cp = ctx.get("checkpointer_close")
+    if close_cp is not None:
+        await close_cp()
+    for key in ("llm", "embedder"):
+        client = ctx.get(key)
+        if client is not None:
+            await client.close()
     await _close_common(ctx)
     log.info("worker stopped queue=%s", DEFAULT_QUEUE)
 
@@ -78,6 +93,7 @@ class WorkerSettings:
         cron(requeue_stuck, minute=set(range(0, 60, 5))),
         cron(reconcile_status, minute=set(range(0, 60, 10))),
         cron(refresh_plans, hour={0}, minute={5}),
+        cron(sweep_checkpoints, hour={0}, minute={10}),
     ]
     on_startup = startup
     on_shutdown = shutdown

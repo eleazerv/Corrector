@@ -68,3 +68,10 @@ async def _fix_pages_done(pool: asyncpg.Pool) -> int:
 
 async def _update_class_test_status(pool: asyncpg.Pool) -> int:
     pass
+
+async def sweep_checkpoints(ctx: dict) -> dict:
+    """Hapus checkpoint LangGraph dari grading run yang sudah selesai (tidak akan di-resume lagi)."""
+    pool = ctx["db"]
+    # 1. ambil thread_id yang boleh dihapus (pakai limit per batch)
+    # 2. delete dari checkpoint_writes, checkpoint_blobs, checkpoints (urutan ini)
+    # 3. return {"threads_swept": n}

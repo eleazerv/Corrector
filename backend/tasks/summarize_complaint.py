@@ -14,6 +14,7 @@ import json
 from dataclasses import dataclass
 from uuid import UUID
 
+from providers.llm.base import PermanentLlmError , TransientLlmError
 import asyncpg
 from arq import Retry
 
@@ -25,14 +26,6 @@ MAX_COMPLAINT_CHARS = 4000
 MAX_ANSWER_CHARS = 6000
 VALID_RECOMMENDATIONS = {"accept", "reject", "review"}
 
-
-class TransientLlmError(Exception):
-    """Sementara: timeout, 429, 5xx. Boleh retry.
-    TODO: pindah ke providers/llm/base.py lalu import dari sana."""
-
-
-class PermanentLlmError(Exception):
-    """Permanen: output tidak valid setelah repair, key salah, dll."""
 
 
 @dataclass
@@ -213,7 +206,7 @@ def _build_messages(c: ComplaintContext) -> list[dict]:
 
 async def _call_llm(llm, messages: list[dict]) -> ComplaintSummary:
     # kontrak provider (dibuat di providers/llm): complete_json(messages) -> dict
-    data = await llm.complete_json(messages)
+    data = (await llm.complete_json(messages)).data
 
     summary = str(data.get("summary", "")).strip()
     rec = str(data.get("recommendation", "")).strip().lower()

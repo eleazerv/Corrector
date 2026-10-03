@@ -76,7 +76,7 @@ def _read_zip(zip_bytes:bytes):
 
 STUDENTS_SQL = """
 select s.id, s.nim , s.school_id 
-from class_test ct 
+from class_tests ct 
 join student_classes sc on sc.class_id = ct.class_id
 join students s on s.id = sc.student_id 
 where ct.id = $1

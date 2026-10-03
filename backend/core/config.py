@@ -16,10 +16,26 @@ class Settings(BaseSettings):
     WORKER_TOKEN : str = Field(min_length=32)
     
     LLM_PROVIDER : str 
-    AI_API_KEY : str 
+    LLM_BASE_URL: str
+    LLM_MODEL : str 
+    LLM_API_KEY : str
+    LLM_MAX_TOKENS: int 
+    LLM_TIMEOUT: float = 120  
+    LLM_JSON_MODE: bool = True 
+    LLM_CONCURRENCY: int = 5 
     
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
     LLM_CONCURRENCY: int = 5
+    
+    LANGGRAPH_CHECKPOINT: str = "postgres"     # postgres 
+    
+    EMBEDDING_PROVIDER: str = "fake"       # api | local | fake
+    EMBEDDING_BASE_URL: str = ""           # endpoint OpenAI-compatible, mis. .../v1
+    EMBEDDING_MODEL: str = ""
+    EMBEDDING_API_KEY: str = ""
+    EMBEDDING_DIM: int = 768               # HARUS sama dengan kolom vector(768)
+    EMBEDDING_SEND_DIMENSIONS: bool = True # kirim param `dimensions` (matikan kalau API nolak)
+
 
     OCR_PROVIDER: str                     # local | api | fake
     OCR_MAX_IMAGE_SIDE: int 
@@ -29,4 +45,5 @@ class Settings(BaseSettings):
     OCR_API_MODE: str 
     OCR_API_TIMEOUT: float 
     
+
 settings = Settings()
