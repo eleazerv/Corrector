@@ -54,6 +54,7 @@ async def get_current_user(
     cred: HTTPAuthorizationCredentials | None = Depends(bearer),
     sb: AsyncClient = Depends(get_supabase),
 ) -> CurrentUser:
+    
     if cred is None:
         raise AppError("UNAUTHORIZED", "Header Authorization not found", 401)
 

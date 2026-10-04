@@ -35,7 +35,7 @@ if sys.platform == "win32":
 async def _init_common (ctx: dict, pool_size: int) -> None : 
     """ worker perlu semua : logging , DB , supabase , storage"""
     setup_logging()
-    ctx["db"] = await create_db_pool(min_size=1, max_size=10)
+    ctx["db"] = await create_db_pool(min_size=1, max_size=pool_size)
     ctx["supabase"] = await acreate_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
     ctx["storage"] = get_storage_provider(ctx["supabase"])
     

@@ -19,23 +19,42 @@ import asyncio
 import math   
 import re 
 import statistics 
+import hashlib
 from providers.llm import PermanentLlmError , TransientLlmError
 
 from . import settings as S 
 
 from .calculator import evaluate , is_close , normalize_kind , run_symbolic 
 from .deps import get_deps 
-from .prompts import advocate_messages, calc_plan_messages, grade_messages,judge_messages
+from .prompts import advocate_messages, calc_plan_messages, grade_messages, judge_messages, trait_filter_messages
 from .text_utils import compact, compact_answer, garbage_ratio, normalize, remove_copied_question, strip_marker
 
 
 TRAITS_SQL = """
-select canonical_text
+select id, canonical_text, source, updated_at
 from teacher_traits
 where teacher_id = $1 and subject_id = $2 and is_active
-order by evidence_count desc, last_seen desc nulls last, id
+order by (source = 'manual') desc, evidence_count desc, last_seen desc nulls last, id
 limit $3
 """
+
+
+GET_PICK_SQL = """
+select picked from question_trait_picks
+where question_id = $1 and teacher_id = $2 and version = $3
+"""
+
+SAVE_PICK_SQL = """
+insert into question_trait_picks (question_id, teacher_id, version, picked)
+values ($1, $2, $3, $4)
+on conflict (question_id, teacher_id) do update set version = excluded.version, picked = excluded.picked
+"""
+
+
+def _traits_version(rows) -> str:
+    """Sidik jari kumpulan trait: berubah kalau ada trait ditambah, diedit, atau dinonaktifkan."""
+    raw = "|".join(sorted(f"{r['id']}:{r['updated_at']}" for r in rows))
+    return hashlib.md5(raw.encode()).hexdigest()
 
 def r2(x: float) -> float:
     """Bulatkan 2 desimal (hindari 7.499999999)."""
@@ -137,14 +156,54 @@ async def exact_match(state, config):
 
 # traits 
 
-
+async def _filter_traits(deps, question, rows) -> tuple[list[str], int]:
+    """LLM menandai trait yang JELAS tidak berlaku. Return (id trait yang dipakai, token)."""
+    short = {f"t{i + 1}": r for i, r in enumerate(rows)}
+    async with deps.semaphore:
+        res = await deps.llm.complete_json(
+            trait_filter_messages(question, [(k, r["canonical_text"]) for k, r in short.items()]),
+            max_tokens=S.TRAIT_FILTER_MAX_TOKENS)
+    drop = res.data.get("buang") if isinstance(res.data, dict) else None
+    drop = {str(x) for x in drop} if isinstance(drop, list) else set()
+    kept = [str(r["id"]) for k, r in short.items()
+            if k not in drop or r["source"] == "manual"]      # tulisan dosen tidak pernah dibuang
+    return kept, res.usage.total
 
 async def retrieve_traits(state, config):
     """Ambil SEMUA trait aktif dosen untuk matkul ini (maks MAX_TRAITS, paling terbukti dulu).
-    Tanpa embedding: grader yang memilih trait relevan setelah membaca jawaban."""
+    Tanpa embedding: grader yang memilih trait relevan setelah membaca jawaban
+    jika melebihi max_trait maka akan ditanyakan ke LLM."""
     deps = get_deps(config)
-    rows = await deps.pool.fetch(TRAITS_SQL, state["q_teacher_id"], state["q_subject_id"], S.MAX_TRAITS)
-    return {"q_traits": [r["canonical_text"] for r in rows]}
+    q = state["q_question"]
+    rows = await deps.pool.fetch(TRAITS_SQL, state["q_teacher_id"], state["q_subject_id"],
+                                 S.TRAIT_FETCH_LIMIT)
+    if len(rows) <= S.MAX_TRAITS:
+        return {"q_traits": [r["canonical_text"] for r in rows]}
+
+    version = _traits_version(rows)
+    notes, tokens = [], 0
+    kept = await deps.pool.fetchval(GET_PICK_SQL, q["id"], state["q_teacher_id"], version)
+    if kept is None:
+        try:
+            kept, tokens = await _filter_traits(deps, q, rows)
+            await deps.pool.execute(SAVE_PICK_SQL, q["id"], state["q_teacher_id"], version, kept)
+        except TransientLlmError:
+            raise
+        except Exception as e:                       # gagal menyaring -> pakai urutan prioritas saja
+            kept = [str(r["id"]) for r in rows]
+            notes.append(f"penyaringan trait dilewati: {e}"[:200])
+
+    keep = set(kept)
+    chosen = [r["canonical_text"] for r in rows if str(r["id"]) in keep]   # urutan prioritas tetap
+    if len(chosen) > S.MAX_TRAITS:
+        notes.append(f"trait dosen {len(chosen)} setelah disaring, hanya {S.MAX_TRAITS} yang dipakai")
+        chosen = chosen[:S.MAX_TRAITS]
+    out = {"q_traits": chosen}
+    if notes:
+        out["q_notes"] = notes
+    if tokens:
+        out["q_tokens"] = tokens
+    return out
 
 _VAR_RE = re.compile(r"^(?:[A-Za-z]|alpha|beta|gamma|theta|phi|lam|mu|omega|tau|rho)$")
 
@@ -349,6 +408,7 @@ async def grade_samples(state,config):
             "q_notes": [f"mode per-kriteria (jawaban panjang)"] if long_answer else []}
 
 async def reconcile(state,config): 
+    """ reconcile fungsinya untuk """
     q = state["q_question"]
     samples = state["q_samples"]
     final , spread_total = [], 0

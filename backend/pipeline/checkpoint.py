@@ -14,7 +14,11 @@ from urllib.parse import urlparse
 from core.logging import log 
 
 async def create_checkpointer(mode: str , dsn: str): 
-    """Return (checkpointer, closer). closer() dipanggil saat shutdown."""
+    """Return (checkpointer, closer). closer() dipanggil saat shutdown.
+    none bearti tidak pakai checkpoint sama sekali 
+    jika memory => hanya simpan di RAM 
+    jika postgres => simpan di dalam database ( jika server mati aman)
+    """
     mode = (mode or "postgres").lower()
     
     if mode == "none" : 

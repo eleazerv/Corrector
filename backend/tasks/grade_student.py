@@ -141,6 +141,10 @@ async def grade_student(ctx: dict, student_test_id: str, trigger_source: str = "
 
 
 async def _process(ctx: dict, student_test_id: UUID, trigger_source: str ,job_try : int ,question_ids: list[str]) -> dict:
+    """ ini process utama grade student 
+    ( cek student_test -> cek status -> start run ( ambil ato buat thread baru )
+    -> SSE -> run_pipeline -> SSE -> return )
+    """
     pool: asyncpg.Pool = ctx["db"]
     if ctx.get("llm") is None:
         raise GradingError("LLM belum di-setup di worker")
@@ -180,18 +184,21 @@ async def _process(ctx: dict, student_test_id: UUID, trigger_source: str ,job_tr
 
 
 async def _load_student_test(pool: asyncpg.Pool, student_test_id: UUID) -> StudentTestInfo | None:
+    """ fungsinya cuma ngeloat student_test dari student_test_id lalu return StudentTestInfo"""
     row = await pool.fetchrow(LOAD_STUDENT_TEST_SQL, student_test_id)
     return StudentTestInfo(**dict(row)) if row else None
 
 
 
 def _is_ready(st: StudentTestInfo, trigger_source: str ="auto") -> bool:
+    """  ngecek apakah di dalam student_test udah sesai smua page nya """
     if st.total_pages <= 0 or st.pages_done < st.total_pages:
         return False
     allowed = AUTO_STATUSES if trigger_source in ("auto", "retry") else GRADABLE_STATUSES
     return st.status in allowed
 
-async def _start_run(pool: asyncpg.Pool, st: StudentTestInfo, trigger_source: str, attempt: int, model : str) -> UUID | None:
+async def _start_run(pool: asyncpg.Pool, st: StudentTestInfo, trigger_source: str, attempt: int, model : str) -> tuple[UUID, str, int]:
+    """ ini buat grading_run baru , jika ada grading_run lama ( tetap pakai thread_id lama ) """
     last = await pool.fetchrow(LAST_RUN_SQL, st.id)
     resume = (last is not None and last["status"] == "failed" and last["thread_id"]
               and trigger_source in ("auto", "retry"))
@@ -202,8 +209,12 @@ async def _start_run(pool: asyncpg.Pool, st: StudentTestInfo, trigger_source: st
     return run_id, thread_id, prev_tokens
 
 async def _run_pipeline(ctx: dict, st: StudentTestInfo, run_id: UUID, thread_id:str , question_ids: list[str] | None = None) -> RunResult:
+    """
+        untuk menjalankan pipeline yang ada di langgraph lalu mereturn RunResult 
+    """
     async def publish(payload: dict) -> None:
         await _publish(ctx, st, payload)
+        
     deps = GradingDeps(pool=ctx["db"], llm=ctx["llm"], embedder=ctx.get("embedder"),
                        semaphore=ctx["llm_semaphore"], publish=publish)
     state = await run_grading(st.id, deps, checkpointer=ctx.get("checkpointer"), thread_id=thread_id,
@@ -227,6 +238,7 @@ async def _run_pipeline(ctx: dict, st: StudentTestInfo, run_id: UUID, thread_id:
     )
 
 async def _finish_run(pool: asyncpg.Pool, run_id: UUID, st: StudentTestInfo, result: RunResult) -> None:
+    """ finish run ini fungsinya hanya update di database """
     await pool.execute(
         FINISH_RUN_SQL, run_id, result.status, result.tokens_total, result.questions_total,
         result.questions_needs_review, result.questions_error, result.total_grade,
@@ -242,6 +254,7 @@ async def _finish_failed_run(pool: asyncpg.Pool, run_id: UUID | None, error: str
 
 
 async def _mark_failed(ctx: dict, student_test_id: UUID, run_id: UUID | None, error: str, tokens :int = 0 ) -> None:
+    """ mark failed di database supaya nextnya bisa di run ulang dan juga publish ke SSE supaya dosen tau """
     try:
         await _finish_failed_run(ctx["db"], run_id, error, tokens)
         await ctx["db"].execute(MARK_STUDENT_FAILED_SQL, student_test_id)

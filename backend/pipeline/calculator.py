@@ -144,6 +144,8 @@ def _sym_normalize(text: str) -> str:
     return s
 
 def _check_chars(s: str) -> None:
+    """ fungsinya untuk ngecheck character apakah lebih panjang dari yang ditentuin
+        dan juga tutup celah injeksi """
     if not s or len(s) > SYM_MAX_LEN:
         raise ValueError("ekspresi kosong / terlalu panjang")
     if not re.fullmatch(r"[A-Za-z0-9_+\-*/().\s]+", s) or "__" in s:
@@ -220,6 +222,7 @@ def _num(expr) -> complex | None:
     return v
 
 def _near(x: complex, y: complex, loose: bool) -> bool:
+    """ ini ngecek apakah x dan y berjarak tidak lebih dari 1e-8 ( batas toleransi biner )"""
     if loose:          # mahasiswa menulis desimal -> toleransi pembulatan
         return is_close(x.real, y.real) and is_close(x.imag, y.imag)
     return abs(x - y) <= 1e-8 * (1 + abs(x) + abs(y))

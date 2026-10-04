@@ -12,7 +12,9 @@ CONFIDENCE_VERIFY = 0.80              # di bawah ini -> debate
 CONFIDENCE_REVIEW = 0.60              # tetap di bawah ini setelah verify -> needs_review
 
 # retrieve_traits: semua trait aktif dosen + matkul masuk prompt, dibatasi
-MAX_TRAITS = 30
+MAX_TRAITS = 2
+TRAIT_FETCH_LIMIT = 200               # batas aman jumlah trait yang dibaca dari DB
+TRAIT_FILTER_MAX_TOKENS = 600         # output penyaring kecil (daftar id)
 
 # check_calculations (soal calculation saja). LLM menulis ekspresi, calculator.py menghitung.
 CALC_CHECK_ENABLED = True             # False -> node dilewati (untuk banding di eval_grading)

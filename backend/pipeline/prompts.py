@@ -208,3 +208,25 @@ def judge_messages(base_user: str, disputes: list[dict], high_args: dict, low_ar
          + "\n\nARGUMEN SKOR TINGGI:\n" + json.dumps(high_args, ensure_ascii=False)
          + "\n\nARGUMEN SKOR RENDAH:\n" + json.dumps(low_args, ensure_ascii=False)},
     ]
+
+TRAIT_FILTER_SYSTEM = """Kamu menyaring daftar kebiasaan menilai seorang dosen untuk SATU soal.
+Tugasmu HANYA menandai kebiasaan yang JELAS TIDAK MUNGKIN berlaku untuk soal ini
+(mis. aturan satuan untuk soal essay tanpa angka). Kalau ragu, JANGAN dibuang.
+
+Balas HANYA JSON: {"buang": ["<id>", ...]}  (boleh kosong)"""
+
+
+def trait_filter_messages(question: dict, traits: list[tuple[str, str]]) -> list[dict]:
+    """traits: [(id pendek, kalimat)]. Output: {"buang": [id, ...]}."""
+    ctx = {
+        "tipe_soal": question["question_type"],
+        "soal": truncate(question["question_text"], MAX_TEXT_CHARS),
+        "kunci_jawaban": truncate(question["key_answer"], MAX_TEXT_CHARS),
+        "kriteria": [c["description"] for c in question["criteria"]],
+    }
+    listing = "\n".join(f"[{tid}] {text}" for tid, text in traits)
+    return [
+        {"role": "system", "content": TRAIT_FILTER_SYSTEM},
+        {"role": "user", "content": "SOAL:\n" + json.dumps(ctx, ensure_ascii=False)
+         + "\n\nKEBIASAAN DOSEN:\n" + listing},
+    ]

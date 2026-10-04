@@ -25,7 +25,6 @@ class Settings(BaseSettings):
     LLM_CONCURRENCY: int = 5 
     
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
-    LLM_CONCURRENCY: int = 5
     
     LANGGRAPH_CHECKPOINT: str = "postgres"     # postgres 
     

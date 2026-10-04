@@ -111,6 +111,8 @@ async def run_grading(student_test_id: UUID | str, deps: GradingDeps, *,
 
     Kalau thread_id sudah punya checkpoint yang belum selesai -> LANJUT dari situ
     (input None), bukan mulai ulang.
+    
+    langsung jalanin build_submission_graph dan ngecek log info dari state yang ada 
     """
     graph = build_submission_graph(checkpointer)
     config = {"configurable": {"deps": deps, "thread_id": thread_id or str(student_test_id)},

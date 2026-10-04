@@ -90,6 +90,12 @@ def _f(x) -> float:
     return float(x) if x is not None else 0.0
 
 async def load_submission(state,config): 
+    """
+    load student test , question, criteria , blocks , rules sebagai context 
+    bakalan update school_id , subject_id , teacher_id , test_max_score , quota_charged , 
+    questions , blocks , rules and run_status pada submission_state 
+    """
+    
     deps = get_deps(config)
     st_id = UUID(state["student_test_id"])
     st = await deps.pool.fetchrow(LOAD_ST_SQL, st_id)
@@ -136,10 +142,13 @@ async def load_submission(state,config):
         "test_max_score": _f(st["max_score"]), "quota_charged": st["quota_charged_at"] is not None,
         "questions": questions, "blocks": blocks, "rules": rules, "run_status": "running",
     }
-    
+
     
     
 async def budget_guard(state, config):
+    """ ini pengecekgan budget ngecek state quota_charged ( kalo udah ga perlu bayar lagi ) 
+    jika belom harus ngecek di sql dann ngecek apakah masih ada quota 
+    """
     if state.get("quota_charged"):
         return {}                                    # regrade: sudah dibayar, tidak dicek lagi
     deps = get_deps(config)
@@ -155,6 +164,7 @@ async def budget_guard(state, config):
 
 
 def route_after_budget(state) -> str:
+    """ ini ngarahin kalo ada budget ato engga kalo bisa ya lanjut ke segment_answer kalo engga end"""
     return "end" if state.get("run_status") == "quota_exceeded" else "segment_answers"
 
 def _heuristic_segments(questions, blocks): 
@@ -285,6 +295,12 @@ async def cross_check(state, config):
 
 
 async def persist(state, config):
+    """" 
+    ini fungsinya simpan nilai ke db 
+    ada state dry_run => ini hanya testing dan sengaja ga dicatat ke db 
+    jika di catat cek apakah udah pernah ada atau belum , jika belum maka insert jawabannya 
+    jika sudah ada di update 
+    """
     deps = get_deps(config)
     st_id = UUID(state["student_test_id"])
     if deps.dry_run:
