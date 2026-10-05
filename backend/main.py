@@ -13,6 +13,8 @@ from core.errors import register_error_handlers
 from core.logging import setup_logging
 from core.middleware import request_context_middleware
 from db.pool import create_db_pool
+from modules.submission.router import router as submission_router 
+from providers.storage import get_storage_provider 
 
 
 
@@ -24,6 +26,7 @@ async def lifespan(app:FastAPI):
     app.state.db = await create_db_pool()
     app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
     app.state.arq = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
+    app.state.storage = get_storage_provider(app.state.supabase)
         
     yield
     
@@ -55,6 +58,8 @@ def create_app() -> FastAPI :
     register_error_handlers(app)
     
     api ="/api/v1"
+    app.include_router(submission_router, prefix=api) 
+    
 
     @app.get("/health", tags=["health"])
     async def health(): 

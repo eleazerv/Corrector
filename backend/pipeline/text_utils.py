@@ -5,7 +5,7 @@ import unicodedata
 _WS = re.compile(r"\s+")
 
 QUESTION_MARK_RE = re.compile(
-    r"^\s*(?:no(?:mor)?\.?|soal|jawaban|jwb\.?)?\s*(\d{1,2})\s*(?:[a-z])?\s*[\.\)\:\-]",
+    r"^\s*(?:no(?:mor)?\.?|soal|jawaban|jwb\.?)?\s*(\d{1,2})[a-z]?\s*[\.\)\:](?!\d)",
     re.IGNORECASE,
 )
 

@@ -12,7 +12,7 @@ CONFIDENCE_VERIFY = 0.80              # di bawah ini -> debate
 CONFIDENCE_REVIEW = 0.60              # tetap di bawah ini setelah verify -> needs_review
 
 # retrieve_traits: semua trait aktif dosen + matkul masuk prompt, dibatasi
-MAX_TRAITS = 2
+MAX_TRAITS = 30
 TRAIT_FETCH_LIMIT = 200               # batas aman jumlah trait yang dibaca dari DB
 TRAIT_FILTER_MAX_TOKENS = 600         # output penyaring kecil (daftar id)
 

@@ -2,7 +2,7 @@ from uuid import UUID
 
 import asyncpg 
 from arq.connections import ArqRedis 
-from fastapi import Depends , Header , Request 
+from fastapi import Depends , Header , Query , Request  
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel 
 from supabase import AsyncClient
@@ -12,6 +12,7 @@ from core.errors import AppError, forbidden
 from core.security import verify_supabase_token
 
 from db.pool import as_user
+from providers.storage.base import StorageProvider
  
 def get_supabase(request: Request) -> AsyncClient:
     return request.app.state.supabase
@@ -90,3 +91,24 @@ async def require_worker(authorization: str | None = Header(None)):
 async def get_user_db(request: Request, user: CurrentUser = Depends(get_current_user)):
     async with as_user(request.app.state.db, user.user_id) as conn:
         yield conn
+        
+async def get_storage(request:Request) -> StorageProvider:
+    return request.app.state.storage
+
+
+# Pool admin (service role) untuk baca/tulis data di endpoint.
+def get_pool(request: Request) -> asyncpg.Pool:
+    return request.app.state.db
+
+
+# EventSource di browser tidak bisa mengirim header Authorization,
+# jadi endpoint SSE menerima token lewat ?access_token=... (header tetap diterima kalau ada).
+async def get_current_user_sse(
+    request: Request,
+    access_token: str | None = Query(None),
+    cred: HTTPAuthorizationCredentials | None = Depends(bearer),
+    sb: AsyncClient = Depends(get_supabase),
+) -> CurrentUser:
+    if cred is None and access_token:
+        cred = HTTPAuthorizationCredentials(scheme="Bearer", credentials=access_token)
+    return await get_current_user(request, cred, sb)
