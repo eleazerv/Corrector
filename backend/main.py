@@ -17,6 +17,7 @@ from modules.submission.router import router as submission_router
 from modules.review.router import router as review_router
 from modules.publish.router import router as publish_router
 from modules.complaint.router import router as complaint_router
+from modules.student.router import router as student_router   
 from providers.storage import get_storage_provider 
 
 
@@ -64,7 +65,8 @@ def create_app() -> FastAPI :
     app.include_router(submission_router, prefix=api) 
     app.include_router(review_router, prefix=api)
     app.include_router(publish_router, prefix=api)
-    app.include_router(complaint_router, prefix=api)   # 
+    app.include_router(complaint_router, prefix=api)   
+    app.include_router(student_router, prefix=api)  
     
 
     @app.get("/health", tags=["health"])
