@@ -14,6 +14,9 @@ from core.logging import setup_logging
 from core.middleware import request_context_middleware
 from db.pool import create_db_pool
 from modules.submission.router import router as submission_router 
+from modules.review.router import router as review_router
+from modules.publish.router import router as publish_router
+from modules.complaint.router import router as complaint_router
 from providers.storage import get_storage_provider 
 
 
@@ -59,6 +62,9 @@ def create_app() -> FastAPI :
     
     api ="/api/v1"
     app.include_router(submission_router, prefix=api) 
+    app.include_router(review_router, prefix=api)
+    app.include_router(publish_router, prefix=api)
+    app.include_router(complaint_router, prefix=api)   # 
     
 
     @app.get("/health", tags=["health"])
