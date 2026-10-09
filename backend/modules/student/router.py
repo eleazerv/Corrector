@@ -45,9 +45,9 @@ async def create_complaint(
     user: CurrentUser = StudentUser,
     db: asyncpg.Pool = Depends(get_pool),
     arq=Depends(get_arq),
-): 
-    row = await service.create_complaint(db, student_test_id, user.profile_id, body.test_answer_id, body.complaint.strip())   
-    try : 
+):
+    row = await service.create_complaint(db, student_test_id, user.profile_id, body.test_answer_id, body.complaint.strip())
+    try :
         await jobs.enqueue_summarize_complaint(arq, row["id"])
     except Exception as e :
         log.warning("create_complaint %s: failed to enqueue summarize_complaint: %s", row["id"], e)

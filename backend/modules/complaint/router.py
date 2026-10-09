@@ -4,15 +4,14 @@ GET  /complaints                        kotak masuk semua ujian yang dosen ini p
 GET  /class-tests/{id}/complaints       keberatan 1 ujian + ringkasan & rekomendasi AI
 POST /complaints/{id}/resolve           terima / tolak
 
-(Pengajuan oleh mahasiswa ada di modules/student, belum dibuat.)
-
-LATIHAN LEVEL 1: endpoint 1 contoh lengkap, endpoint 2 dan 3 sebagian kamu isi.
+(Pengajuan oleh mahasiswa ada di modules/student.)
 """
 from typing import Literal
 from uuid import UUID
 
 import asyncpg
 from fastapi import APIRouter, Depends, Query
+from core.ratelimit import rate_limit
 
 from core import jobs
 from core.access import ensure_class_test_access, ensure_complaint_access
@@ -26,7 +25,6 @@ router = APIRouter(tags=["complaint"])
 StatusFilter = Literal["pending", "accepted", "rejected"]      # nilai yang boleh untuk ?status=
 
 
-# ---------------------------------------------------------------- 1) [CONTOH] lengkap
 @router.get("/class-tests/{class_test_id}/complaints")
 async def list_complaints(
     class_test_id: UUID,
@@ -48,7 +46,7 @@ async def inbox(
     return await service.inbox(db, user.profile_id, status=status, limit=limit)
 
 
-@router.post("/complaints/{complaint_id}/resolve")
+@router.post("/complaints/{complaint_id}/resolve", dependencies=[Depends(rate_limit("complaint_resolve", 30))])
 async def resolve(
     complaint_id: UUID,
     body: ResolveIn,
@@ -59,7 +57,7 @@ async def resolve(
     """`teacher_response` akan dibaca mahasiswa. Kalau accepted dan nilai berubah,
     perubahan itu tercatat sebagai override dan ikut dipelajari jadi trait dosen."""
     await ensure_complaint_access(db,user,complaint_id)
-    
+
     result = await service.resolve(
         db, complaint_id=complaint_id, teacher_id=user.profile_id, status=body.status,
         teacher_response=body.teacher_response.strip(), new_grade=body.new_grade)

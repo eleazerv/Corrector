@@ -1,11 +1,11 @@
-import asyncio 
-import io 
-import re 
-import zipfile 
+import asyncio
+import io
+import re
+import zipfile
 
-from collections import Counter, defaultdict 
+from collections import Counter, defaultdict
 from pathlib import PurePosixPath
-from uuid import UUID 
+from uuid import UUID
 
 import asyncpg
 from fastapi import UploadFile
@@ -33,30 +33,30 @@ def sniff_image(data: bytes) -> str | None:
         return "image/webp"
     return None
 
-def check_image (data:bytes , name :str) -> tuple[bytes,str] : 
+def check_image (data:bytes , name :str) -> tuple[bytes,str] :
     """Tipe gambar dari ISI file (bukan dari header kiriman client, yang bisa dipalsukan)."""
-    if not data : 
+    if not data :
         raise AppError("VALIDATION_ERROR", f"File '{name}' is empty", 422)
-    if len(data) > MAX_IMAGE_BYTES: 
+    if len(data) > MAX_IMAGE_BYTES:
         raise AppError("FILE_TOO_LARGE", f"File '{name}' exceeds {MAX_IMAGE_BYTES // (1024 * 1024)} MB", 413)
     ctype = sniff_image(data)
-    if ctype is None: 
+    if ctype is None:
         raise AppError("UNSUPPORTED_MEDIA_TYPE", f"File '{name}' is not a JPEG, PNG or WebP image", 415)
-    return data , ctype 
+    return data , ctype
 
-async def read_images(files: list[UploadFile]) -> list[tuple[bytes,str]] : 
+async def read_images(files: list[UploadFile]) -> list[tuple[bytes,str]] :
     """
     baca semua file yang di upload , urutan file = urutan halaman
     """
-    if not files : 
+    if not files :
         raise AppError("VALIDATION_ERROR", "At least one image is required", 422)
-    if len(files) > MAX_PAGES_PER_STUDENT: 
+    if len(files) > MAX_PAGES_PER_STUDENT:
         raise AppError("TOO_MANY_PAGES", f"Maximum {MAX_PAGES_PER_STUDENT} pages per student", 413)
     out = []
-    for f in files: 
+    for f in files:
         data = await f.read(MAX_IMAGE_BYTES + 1)
         out.append(check_image(data, f.filename))
-    return out 
+    return out
 
 
 STUDENT_IN_CLASS_TEST_SQL = """
@@ -69,48 +69,45 @@ where ct.id = $1 and (s.id = $2 or s.nim = $3)
 
 
 ROSTER_SQL = """
-select s.id, s.nim , s.name , s.school_id 
-from class_tests ct 
-join student_classes sc on sc.class_id = ct.class_id   
-join students s on s.id = sc.student_id 
+select s.id, s.nim , s.name , s.school_id
+from class_tests ct
+join student_classes sc on sc.class_id = ct.class_id
+join students s on s.id = sc.student_id
 where ct.id = $1
 """
 
-async def find_student(db , class_test_id: UUID , student_id: UUID | None , nim: str | None): 
+async def find_student(db , class_test_id: UUID , student_id: UUID | None , nim: str | None):
     """ ngecek siswa ada ga di kelas yang ikut ujian """
-    if student_id is None and not nim : 
+    if student_id is None and not nim :
         raise AppError("VALIDATION_ERROR", "student_id or nim is required", 422)
-    row = await db.fetchrow(STUDENT_IN_CLASS_TEST_SQL,class_test_id,student_id, (nim or "").strip() or None) 
-    if row is None : 
+    row = await db.fetchrow(STUDENT_IN_CLASS_TEST_SQL,class_test_id,student_id, (nim or "").strip() or None)
+    if row is None :
         raise not_found("student in this class")
-    return row 
+    return row
 
 
-
-
-
-async def ingest_student_pages(db : asyncpg.Pool , storage , arq , class_test_id : UUID ,student , images: list[tuple[bytes,str]]) -> dict : 
-    """ simpan foto 1 mahasiswa (zip) lalu antriin ke OCR 
-        student -> cek dlu ada ga di class_test yang ada 
-        foto boleh ditimpa kalo absent / needs_reupload / failed 
+async def ingest_student_pages(db : asyncpg.Pool , storage , arq , class_test_id : UUID ,student , images: list[tuple[bytes,str]]) -> dict :
+    """ simpan foto 1 mahasiswa (zip) lalu antriin ke OCR
+        student -> cek dlu ada ga di class_test yang ada
+        foto boleh ditimpa kalo absent / needs_reupload / failed
     """
-    
+
     existing = await db.fetchrow(" select id , status from student_tests where class_test_id = $1 and student_id = $2",
                                  class_test_id,student["id"])
-    if existing and existing["status"] not in SHEET_REPLACEABLE: 
+    if existing and existing["status"] not in SHEET_REPLACEABLE:
         raise conflict(f"student alraedy has an answer sheet (status: {existing['status']})")
-    
-    keys = [page_key(student["school_id"],class_test_id,student["id"],i,IMAGE_TYPES[ctype]) for i,(_,ctype) in enumerate(images,start=1)] 
+
+    keys = [page_key(student["school_id"],class_test_id,student["id"],i,IMAGE_TYPES[ctype]) for i,(_,ctype) in enumerate(images,start=1)]
     sem = asyncio.Semaphore(UPLOAD_CONCURRENCY)
-    
-    async def put (key:str , data:bytes , ctype:str) -> None : 
-        async with sem : 
+
+    async def put (key:str , data:bytes , ctype:str) -> None :
+        async with sem :
             await storage.upload(key,data,ctype)
-            
-    #upload images nya barengan 
+
+    #upload images nya barengan
     await asyncio.gather(*(put(k,d,c) for k,(d,c) in zip(keys,images)))
-    
-    # pakai conn transaction biar ga ada data nyangkut 
+
+    # pakai conn transaction biar ga ada data nyangkut
     async with db.acquire() as conn, conn.transaction():
         #cek apakah udah ada belom
         row = await conn.fetchrow(
@@ -118,20 +115,20 @@ async def ingest_student_pages(db : asyncpg.Pool , storage , arq , class_test_id
             class_test_id , student["id"]
         )
         old_paths: list[str] = []
-        # kalo studentnya gaada langsung aja 
-        if row is None: 
+        # kalo studentnya gaada langsung aja
+        if row is None:
             st_id = await conn.fetchval(
             """insert into student_tests (class_test_id, student_id, total_pages, pages_done, status)
                 values ($1, $2, $3, 0, 'ocr_queued') returning id""",
             class_test_id, student["id"], len(images))
-        # kalo udah ada 
-        else : 
-            if row["status"] not in SHEET_REPLACEABLE: 
+        # kalo udah ada
+        else :
+            if row["status"] not in SHEET_REPLACEABLE:
                 raise conflict(f"Student already has an answer sheet (status: {row['status']})")
             st_id = row["id"]
-            
-            #ambil old_paths dan execute delete dari tests_answers dan test_pages 
-            #update student_tests jadi 0 lagi agar ocr bisa run 
+
+            #ambil old_paths dan execute delete dari tests_answers dan test_pages
+            #update student_tests jadi 0 lagi agar ocr bisa run
             old_paths = [r["image_path"] for r in await conn.fetch("select image_path from test_pages where student_test_id = $1",st_id)]
             await conn.execute("delete from test_answers where student_test_id = $1", st_id)
             await conn.execute("delete from test_pages where student_test_id = $1", st_id)
@@ -142,43 +139,43 @@ async def ingest_student_pages(db : asyncpg.Pool , storage , arq , class_test_id
                    where id = $1""", st_id, len(images))
         # Tadinya hanya jalan untuk lembar yang SUDAH ada; mahasiswa baru tidak dapat halaman.
         pages = []
-        # untk setiap key baru bakal dibuat test_page baru dan set status pending 
-        for page_no , key in enumerate(keys, start=1): 
+        # untk setiap key baru bakal dibuat test_page baru dan set status pending
+        for page_no , key in enumerate(keys, start=1):
             page_id = await conn.fetchval(
                 """insert into test_pages (student_test_id, page_no, image_path, status)
                 values ($1, $2, $3, 'pending') returning id""", st_id, page_no, key)
             pages.append({"id":page_id , "page_no": page_no})
         await conn.execute(
-            """update class_tests set status = 'processing'   
+            """update class_tests set status = 'processing'
             where id = $1 and status in ('scheduled','uploading','reviewing')"""
-            ,class_test_id 
+            ,class_test_id
         )
-            
+
     stale = [p for p in old_paths if p not in keys]
-    if stale: 
-        try: 
+    if stale:
+        try:
             await storage.delete(stale)
-        except Exception as e : 
+        except Exception as e :
             log.warning("upload: gagal hapus foto lama %s %s",stale[:3],e)
-    
-    enqueued = 0 
-    for p in pages : 
-        try : 
+
+    enqueued = 0
+    for p in pages :
+        try :
             enqueued += await jobs.enqueue_ocr_page(arq,p["id"])
         except Exception as e:                                   # cron requeue_stuck akan menyusul
             log.warning("upload: gagal enqueue ocr page=%s: %s", p["id"], e)
 
-    
+
     return {"student_test_id": st_id, "student_id": student["id"], "nim": student["nim"],
             "pages": pages, "enqueued": enqueued}
 
 
 PAGE_FOR_REUPLOAD_SQL = """
-select tp.id , tp.status , tp.image_path , st.class_test_id , st.student_id , st.status as sheet_status, c.school_id 
-from test_pages tp 
-join student_tests st on st.id = tp.student_test_id 
-join class_tests ct on ct.id = st.class_test_id 
-join classes c on c.id = ct.class_id  
+select tp.id , tp.status , tp.image_path , st.class_test_id , st.student_id , st.status as sheet_status, c.school_id
+from test_pages tp
+join student_tests st on st.id = tp.student_test_id
+join class_tests ct on ct.id = st.class_test_id
+join classes c on c.id = ct.class_id
 where tp.student_test_id = $1 and tp.page_no = $2
 """
 async def reupload_page(db: asyncpg.Pool, storage, arq, student_test_id: UUID, page_no: int,
@@ -194,11 +191,11 @@ async def reupload_page(db: asyncpg.Pool, storage, arq, student_test_id: UUID, p
 
     data, ctype = image
     key = page_key(school_id=page["school_id"],class_test_id=page["class_test_id"],student_id=page["student_id"],page_no=page_no,ext=IMAGE_TYPES[ctype])
-    await storage.upload(key, data, ctype) 
-    
+    await storage.upload(key, data, ctype)
+
     async with db.acquire() as conn, conn.transaction():
-   
-        await conn.execute("""update test_pages set image_path = $2, status = 'pending',ocr_result = null, error = null where id = $1 """,page["id"],key)  
+
+        await conn.execute("""update test_pages set image_path = $2, status = 'pending',ocr_result = null, error = null where id = $1 """,page["id"],key)
         # pages_done dihitung ulang dari halaman yang benar-benar sukses
         await conn.execute(
             """update student_tests st
@@ -207,23 +204,23 @@ async def reupload_page(db: asyncpg.Pool, storage, arq, student_test_id: UUID, p
                                  where student_test_id = st.id and status = 'success')
                where st.id = $1""", student_test_id)
 
-        await conn.execute("""update class_tests set status ='processing'  
+        await conn.execute("""update class_tests set status ='processing'
                            where id = $1 and status in ('scheduled','uploading','reviewing')""",page["class_test_id"])
-    if page["image_path"] != key: 
-        try: 
+    if page["image_path"] != key:
+        try:
             await storage.delete([page["image_path"]])
-        except Exception as e : 
+        except Exception as e :
             log.warning("reupload: gagal hapus foto lama %s %s", page["image_path"],e)
 
     queued = await jobs.enqueue_ocr_page(arq, page["id"],again=True)
     return {"student_test_id": student_test_id, "page": {"id": page["id"], "page_no": page_no},
             "enqueued": int(queued)}
-    
+
 
 HEADER_SQL = """
-select ct.id , ct.status , ct.published_at , t.name as test_name , t.max_score 
-from class_tests ct join tests t on t.id = ct.test_id  
-where ct.id =$1 
+select ct.id , ct.status , ct.published_at , t.name as test_name , t.max_score
+from class_tests ct join tests t on t.id = ct.test_id
+where ct.id =$1
 """
 PROGRESS_SQL = """
 with roster as (
@@ -247,12 +244,12 @@ order by coalesce(st.needs_review, false) desc, s.nim
 """
 
 
-async def progress(db,class_test_id: UUID) -> dict : 
+async def progress(db,class_test_id: UUID) -> dict :
     head = await db.fetchrow(HEADER_SQL, class_test_id)
-    if head is None : 
+    if head is None :
         raise not_found("Class test")
     items = [{**dict(r), "total_grade": num(r["total_grade"])} for r in await db.fetch(PROGRESS_SQL,class_test_id)]
-    
+
     return {
         "class_test_id": head["id"], "class_test_status": head["status"],
         "test_name": head["test_name"], "max_score": num(head["max_score"]),
@@ -270,35 +267,35 @@ def read_zip(zip_bytes: bytes) -> tuple[dict[str, dict[int, bytes]], list[str]]:
     unmatched: list[str] = []
     total = 0
     try:
-        # baca file zip 
+        # baca file zip
         zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile:
-        #invalid zip 
+        #invalid zip
         raise AppError("VALIDATION_ERROR", "File is not a valid ZIP", 422)
     with zf:
         infos = zf.infolist()
-        #cek banyak entries nya 
+        #cek banyak entries nya
         if len(infos) > MAX_ZIP_ENTRIES:
             raise AppError("VALIDATION_ERROR", f"ZIP has more than {MAX_ZIP_ENTRIES} entries", 422)
-        # untuk setiap file buat name , path nya 
+        # untuk setiap file buat name , path nya
         for info in infos:
             name = info.filename
             path = PurePosixPath(name)
             if info.is_dir() or "__MACOSX" in path.parts or path.name.startswith("."):
                 continue
             m = ZIP_NAME_RE.match(path.stem)        # kelasA/2501_1.jpg -> stem "2501_1"
-            # cek apakah sesuai dengan mime type yang diizinin 
+            # cek apakah sesuai dengan mime type yang diizinin
             if not m or path.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
                 unmatched.append(name)
                 continue
-            # kalo file size ny melebihi raise error 
+            # kalo file size ny melebihi raise error
             if info.file_size > MAX_IMAGE_BYTES:
                 raise AppError("FILE_TOO_LARGE", f"'{name}' exceeds {MAX_IMAGE_BYTES // (1024 * 1024)} MB", 413)
             total += info.file_size
-            # kalo file kegedean 
+            # kalo file kegedean
             if total > MAX_ZIP_TOTAL_BYTES:
                 raise AppError("FILE_TOO_LARGE", "ZIP content is too large after extraction", 413)
-            # ambil nim dari regex 
+            # ambil nim dari regex
             nim, page_no = m["nim"], int(m["page"])
             if page_no in pages[nim]:               # halaman dobel -> yang kedua diabaikan
                 unmatched.append(name)
@@ -309,28 +306,28 @@ def read_zip(zip_bytes: bytes) -> tuple[dict[str, dict[int, bytes]], list[str]]:
 
 async def ingest_zip_upload(db, storage, arq, class_test_id: UUID, zip_bytes: bytes) -> dict:
     """ZIP 1 kelas -> lembar per mahasiswa. Nama file: NIM_halaman.jpg (boleh di dalam folder)."""
-    # read zip 
+    # read zip
     pages_by_nim, unmatched_files = await asyncio.to_thread(read_zip, zip_bytes)
     roster = {r["nim"]: r for r in await db.fetch(ROSTER_SQL, class_test_id)}
 
     uploaded, skipped = [], []
     # loop dict ( page , nim )
     for nim in sorted(pages_by_nim):
-        #kalo nim gaada di kelas continue 
+        #kalo nim gaada di kelas continue
         if nim not in roster:
             continue
-        # ambil page nim nya 
+        # ambil page nim nya
         by_page = pages_by_nim[nim]
         try:
             # halaman diurutkan menurut nomor di nama file, lalu dinomori ulang 1..n
             images = [check_image(by_page[p], f"{nim}_{p}") for p in sorted(by_page)]
-            # kalo length page per student lebih raise error 
+            # kalo length page per student lebih raise error
             if len(images) > MAX_PAGES_PER_STUDENT:
                 raise AppError("VALIDATION_ERROR", f"Max {MAX_PAGES_PER_STUDENT} pages per student", 422)
-            #append upload 
+            #append upload
             uploaded.append(await ingest_student_pages(db, storage, arq, class_test_id, roster[nim], images))
         except AppError as e:                       # 1 mahasiswa bermasalah != seluruh ZIP gagal
-            #error append 
+            #error append
             skipped.append({"nim": nim, "reason": e.message})
 
     return {

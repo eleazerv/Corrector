@@ -46,9 +46,7 @@ select role, id, school_id from (
 order by prio
 limit 1
 """
-async def get_db(request: Request):
-    async with request.app.state.db.acquire() as conn:
-        yield conn
+
 
 async def get_current_user(
     request: Request,
@@ -82,15 +80,6 @@ AdminUser = Depends(require_role("school_admin"))
 
 import secrets
 
-async def require_worker(authorization: str | None = Header(None)):
-    expected = f"Bearer {settings.WORKER_TOKEN}"
-    if not authorization or not secrets.compare_digest(authorization, expected):
-        raise AppError("UNAUTHORIZED", "Token is not valid", 401)
-
-
-async def get_user_db(request: Request, user: CurrentUser = Depends(get_current_user)):
-    async with as_user(request.app.state.db, user.user_id) as conn:
-        yield conn
         
 async def get_storage(request:Request) -> StorageProvider:
     return request.app.state.storage

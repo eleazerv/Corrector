@@ -1,6 +1,4 @@
 """Logika + SQL keberatan dari sisi DOSEN (ringkasan + rekomendasi AI ikut ditampilkan).
-
-
 """
 from uuid import UUID
 
@@ -37,12 +35,12 @@ INBOX_SQL = (_SELECT + " where (ct.corrector_id = $1 or cl.teacher_id = $1)"
              " and ($2::text is null or c.status = $2)" + _ORDER + " limit $3")
 
 def _row(r) -> dict:
-    """[CONTOH] Record -> dict, kolom numeric dijadikan float."""
+    """Record -> dict, kolom numeric dijadikan float."""
     return {**dict(r), "max_points": num(r["max_points"]), "current_grade": num(r["current_grade"])}
 
 
 async def list_for_class_test(db, class_test_id: UUID, status: str | None) -> dict:
-    """[CONTOH] Keberatan 1 ujian + berapa yang masih pending."""
+    """Keberatan 1 ujian + berapa yang masih pending."""
     rows = [_row(r) for r in await db.fetch(BY_CLASS_TEST_SQL, class_test_id, status)]
     return {"items": rows, "pending": sum(1 for r in rows if r["status"] == "pending")}
 
@@ -75,7 +73,7 @@ async def resolve(db: asyncpg.Pool, complaint_id: UUID, teacher_id: UUID, status
         if status == "accepted" and c["test_answer_id"] is not None:
             if new_grade is None:
                 raise AppError("VALIDATION_ERROR", "new_grade is required when accepting this complaint", 422)
-            
+
             override = await apply_override(
                 conn,test_answer_id=c["test_answer_id"],teacher_id=teacher_id,new_grade=new_grade,reason=teacher_response,complaint_id=c["id"]
             )
@@ -83,9 +81,9 @@ async def resolve(db: asyncpg.Pool, complaint_id: UUID, teacher_id: UUID, status
             raise AppError("VALIDATION_ERROR",
                            "new_grade is only allowed when accepting a complaint about one question", 422)
         row =  await conn.fetchrow("""
-                         update student_complaints 
+                         update student_complaints
                          set status = $2 , teacher_response = $3 , resolved_at= now()
-                         where id = $1 
+                         where id = $1
                          returning id , status , teacher_response, resolved_at,student_test_id, test_answer_id
                          """
                         ,complaint_id,status,teacher_response)

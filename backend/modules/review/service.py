@@ -13,7 +13,7 @@ from core.errors import AppError, conflict, not_found
 from core.logging import log
 from modules.shared import SHEET_GRADED, SIGNED_URL_TTL, num
 
-from . import schemas 
+from . import schemas
 #  detail 1 lembar
 
 SHEET_SQL = """
@@ -64,12 +64,12 @@ order by o.test_answer_id, o.created_at desc
 
 async def _sign(storage, path: str) -> str | None:
     """Signed URL 1 foto. Gagal -> None (1 foto hilang tidak boleh membuat halaman review gagal dibuka)."""
-    try: 
+    try:
         url = await storage.signed_url(path,SIGNED_URL_TTL)
     except Exception as e :
         log.warning("sign url failed %s: %s", path, e)
         return None
-    return url 
+    return url
 
 def _merge_criteria(result, criteria: list[dict]) -> list[dict]:
     """Tempelkan deskripsi kriteria ke hasil per kriteria.
@@ -80,14 +80,14 @@ def _merge_criteria(result, criteria: list[dict]) -> list[dict]:
     Return     = list yang sama, tiap item ditambah key "description".
     """
     desc = {}
-    for c in criteria : 
+    for c in criteria :
         desc[str(c["id"])] = c["description"]
 
     out = []
-    for item in result or []: 
+    for item in result or []:
         cid = str(item.get("criterion_id",""))
         text = desc.get(cid)
-        if text is None and cid.startswith("auto"): 
+        if text is None and cid.startswith("auto"):
             text = "Jawaban sesuai kunci jawaban"
         out.append({**item,"description": text})
     return out
@@ -108,7 +108,7 @@ async def sheet_detail(db, storage, student_test_id: UUID, include_ocr: bool = F
 
     pages = []
     urls = await asyncio.gather(*(_sign(storage,p["image_path"])for p in page_rows))
-    for p , url in zip(page_rows,urls): 
+    for p , url in zip(page_rows,urls):
         page = {
             "id": p["id"],
             "page_no": p["page_no"],
@@ -116,7 +116,7 @@ async def sheet_detail(db, storage, student_test_id: UUID, include_ocr: bool = F
             "error": p["error"],
             "image_url": url,
         }
-        if include_ocr: 
+        if include_ocr:
             page["ocr_blocks"] = p["ocr_result"] or []
         pages.append(page)
 
@@ -128,7 +128,7 @@ async def sheet_detail(db, storage, student_test_id: UUID, include_ocr: bool = F
     overrides = {o["test_answer_id"]: o for o in o_rows}       # {answer_id: baris override terakhir}
 
     answers = []
-    for q in q_rows: 
+    for q in q_rows:
         crit = criteria.get(str(q["question_id"]),[])
         ov = overrides.get(q["answer_id"])
         answers.append({
@@ -174,7 +174,6 @@ async def sheet_detail(db, storage, student_test_id: UUID, include_ocr: bool = F
     }
 
 
-
 # `for update of ta` = kunci baris jawaban ini sampai transaksi selesai,
 # supaya 2 override bersamaan tidak saling menimpa old_grade
 ANSWER_FOR_OVERRIDE_SQL = """
@@ -203,17 +202,17 @@ async def apply_override(conn: asyncpg.Connection, *, test_answer_id: UUID, teac
 
     Satu-satunya jalur ubah nilai oleh dosen: dipakai override biasa DAN keberatan yang diterima.
     """
-    
+
     row = await conn.fetchrow(ANSWER_FOR_OVERRIDE_SQL, test_answer_id)
     if row is None :
         raise not_found("test_answer")
-    if row["status"] not in SHEET_GRADED: 
+    if row["status"] not in SHEET_GRADED:
         raise conflict(f"Cannot override a sheet with status {row['status']}")
     max_points = float(row["max_points"])
     if new_grade < 0 or new_grade > max_points + 1e-9:
         raise AppError("VALIDATION_ERROR", f"new_grade must be between 0 and {max_points:g}", 422)
     override_id =await conn.fetchval (
-            """insert into grade_overrides 
+            """insert into grade_overrides
                 (student_test_id, test_answer_id, complaint_id, teacher_id, reason, old_grade, new_grade)
                 values($1,$2,$3,$4,$5,$6,$7)
                 returning id""",
@@ -222,7 +221,7 @@ async def apply_override(conn: asyncpg.Connection, *, test_answer_id: UUID, teac
         """ update test_answers set grade = $1, needs_review = false where id = $2 """,
         new_grade,test_answer_id)
     sheet = await conn.fetchrow(RECALC_SHEET_SQL, row["student_test_id"])
-    
+
     return schemas.OverrideOut(
         override_id=override_id,
         test_answer_id=test_answer_id,
@@ -232,7 +231,6 @@ async def apply_override(conn: asyncpg.Connection, *, test_answer_id: UUID, teac
         total_grade=num(sheet["total_grade"]),
         needs_review=sheet["needs_review"],
     )
-    
 
 
 async def approve_sheet(db: asyncpg.Pool, student_test_id: UUID) -> dict:
@@ -240,7 +238,7 @@ async def approve_sheet(db: asyncpg.Pool, student_test_id: UUID) -> dict:
     async with db.acquire () as conn, conn.transaction() :
         student_test = await conn.fetchrow("""update student_tests set status = 'reviewed' , needs_review=false where id = $1 and status in('graded','reviewed')
                                 returning id, status, total_grade""",student_test_id)
-        if not student_test: 
+        if not student_test:
             student_test_status = await  conn.fetchval(" select status from student_tests where id = $1",student_test_id)
             if student_test_status is None:
                 raise not_found("Student test")
@@ -262,9 +260,9 @@ async def check_regradable(db, student_test_id: UUID, question_ids: list[UUID] |
     """Syarat nilai ulang. Dicek di API supaya dosen dapat pesan jelas,
     bukan job yang diam-diam dilewati worker. Tidak mengembalikan apa-apa; gagal = raise."""
     st = await db.fetchrow(STUDENT_TEST_FOR_REGRADE_SQL,student_test_id)
-    if not st : 
+    if not st :
         raise not_found("student test")
-    if st["status"] not in REGRADABLE : 
+    if st["status"] not in REGRADABLE :
         raise conflict(f"Cannot regrade a sheet with status {st['status']}")
     if st["total_pages"] <= 0 or st["pages_done"] < st["total_pages"] :
         raise conflict("OCR not complete")

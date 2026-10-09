@@ -57,7 +57,7 @@ where student_test_id = $1 and student_id = $2
 
 
 async def my_tests(db, student_id: UUID) -> dict:
-    """[CONTOH] Daftar ujian yang nilainya sudah dirilis."""
+    """Daftar ujian yang nilainya sudah dirilis."""
     rows = await db.fetch(LIST_SQL, student_id)
     return {"items": [{**dict(r), "total_grade": num(r["total_grade"]), "max_score": num(r["max_score"])}
                       for r in rows]}
@@ -76,19 +76,19 @@ async def _own_sheet(db, student_test_id: UUID, student_id: UUID):
 
 async def _sign(storage, path: str) -> str | None:
     """Signed URL 1 foto. Gagal -> None."""
-    try: 
+    try:
         url = await storage.signed_url(path,SIGNED_URL_TTL)
-    except Exception as e : 
+    except Exception as e :
         log.warning("sign url failed %s %s",path,e)
-        return None 
-    return url 
+        return None
+    return url
 
 
 async def my_test_detail(db, storage, student_test_id: UUID, student_id: UUID) -> dict:
     """Detail nilai sendiri per soal + foto lembar + keberatan yang sudah diajukan."""
-    
+
     sheet = await _own_sheet(db,student_test_id,student_id)
-    q_rows = await db.fetch(QUESTIONS_SQL,student_test_id,sheet["test_id"]) 
+    q_rows = await db.fetch(QUESTIONS_SQL,student_test_id,sheet["test_id"])
     page_rows = await db.fetch(PAGES_SQL,student_test_id)
     complaints = await db.fetch(SHEET_COMPLAINTS_SQL,student_test_id,student_id)
     urls = await asyncio.gather(*(_sign(storage, p["image_path"]) for p in page_rows))
@@ -103,9 +103,9 @@ async def my_test_detail(db, storage, student_test_id: UUID, student_id: UUID) -
            "pages": [{"page_no": p["page_no"], "image_url": u} for p, u in zip(page_rows, urls)],
            "answers": [dto.answer_out(q, bool(q["adjusted"])) for q in q_rows],
            "complaints": [dict(c) for c in complaints],
-           }    
+           }
 
-    return row 
+    return row
 
 
 async def create_complaint(db: asyncpg.Pool, student_test_id: UUID, student_id: UUID,
@@ -121,11 +121,11 @@ async def create_complaint(db: asyncpg.Pool, student_test_id: UUID, student_id: 
             if not belongs:
                 raise not_found("Test answer")
 
-        complaint = await conn.fetchval("""select 1 from student_complaints where student_test_id = $1 and student_id = $2 and status = 'pending' and test_answer_id is not distinct from $3 
+        complaint = await conn.fetchval("""select 1 from student_complaints where student_test_id = $1 and student_id = $2 and status = 'pending' and test_answer_id is not distinct from $3
                       """,student_test_id,student_id,test_answer_id)
-        if complaint: 
+        if complaint:
             raise conflict("You already have a pending complaint for this item")
-        
+
         row = await conn.fetchrow(""" insert into student_complaints(student_id, student_test_id, test_answer_id,complaint,status)
                                   values($1,$2,$3,$4,'pending')
                                   returning id, student_test_id, test_answer_id, complaint, status""",

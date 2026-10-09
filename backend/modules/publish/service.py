@@ -1,7 +1,4 @@
 """Logika + SQL modul publish (rilis nilai ke mahasiswa, ekspor CSV).
-
-LATIHAN LEVEL 2: SQL sudah disediakan, logikanya kamu tulis dari daftar langkah.
-Petunjuknya lebih sedikit daripada modul review. Kalau buntu, sebut TODO-nya (A/B/C/D).
 """
 import csv
 import io
@@ -29,16 +26,16 @@ async def publish(db: asyncpg.Pool, class_test_id: UUID, allow_needs_review: boo
       - tidak ada lembar yang bisa dirilis
       - ada lembar bertanda needs_review dan allow_needs_review = false
     """
-    async with db.acquire() as conn, conn.transaction(): 
+    async with db.acquire() as conn, conn.transaction():
         if await conn.fetchval("select id from class_tests where id = $1 for update", class_test_id) is None:
-            raise not_found("Class test")       
+            raise not_found("Class test")
         rows = await conn.fetch(STATUS_COUNT_SQL, class_test_id)
         counts = {r["status"]: r["n"] for r in rows}
         busy = {s: counts[s] for s in SHEET_IN_PROGRESS if counts.get(s)}
-        if busy : 
+        if busy :
             raise AppError("CONFLICT","some answer sheets are still being processed",409,{"in_progress": busy})
         ready = counts.get("graded",0) + counts.get("reviewed",0)
-        if ready == 0 : 
+        if ready == 0 :
             raise conflict("No graded answer sheets to publish")
         flagged = sum(r["review"] for r in rows if r["status"] == "graded")
         if flagged and not allow_needs_review:
@@ -49,7 +46,7 @@ async def publish(db: asyncpg.Pool, class_test_id: UUID, allow_needs_review: boo
         """update student_tests set status = 'published'
             where class_test_id = $1 and status in ('graded', 'reviewed') returning id""", class_test_id)
         head = await conn.fetchrow("update class_tests set status = 'published', published_at = coalesce(published_at, now()) where id = $1 returning status, published_at",class_test_id)
-        
+
     not_published = {s: counts[s] for s in counts if s not in {"graded", "reviewed", "published"}}
     return {
         "class_test_id": class_test_id, "status": head["status"], "published_at": head["published_at"],
@@ -86,12 +83,12 @@ async def export_csv(db, class_test_id: UUID) -> str:
         2501,Budi,published,25,10,15
         2502,Sari,failed,,,
     """
-    
-    sheets, questions = await db.fetch(EXPORT_SHEETS_SQL, class_test_id), await db.fetch(EXPORT_QUESTIONS_SQL, class_test_id)  
+
+    sheets, questions = await db.fetch(EXPORT_SHEETS_SQL, class_test_id), await db.fetch(EXPORT_QUESTIONS_SQL, class_test_id)
     grades = {(r["student_test_id"],r["question_id"]): num(r["grade"]) for r in await db.fetch(EXPORT_ANSWERS_SQL, class_test_id) if r["grade"] is not None}
     buf = io.StringIO()
     w =csv.writer(buf)
     w.writerow(["nim", "name", "status", "total_grade"] + [f"q{q['number']} (max {q['max_points']})" for q in questions])
-    for s in sheets: 
+    for s in sheets:
         w.writerow([s["nim"], s["name"], s["status"], s["total_grade"]] + [grades.get((s["id"], q["id"]), "") for q in questions])
     return "\ufeff" + buf.getvalue()
