@@ -346,7 +346,7 @@ async def _generate_trait(llm, override: OverrideInfo, context: dict) -> TraitDr
         aspect=_text(data, "aspect")[:200],
         condition=_text(data, "condition")[:500],
         direction=direction,
-        canonical_text=canonical,q
+        canonical_text=canonical,
     )
 
 
