@@ -65,6 +65,15 @@ class TraitDecision:
     similarity: float | None
 
 
+@dataclass
+class SaveResult:
+    trait_id: UUID                    # trait tempat evidence dicatat (contradict = trait LAMA)
+    action: str                       # insert | update (setelah fallback)
+    relation: str                     # support | contradict
+    conflict_id: UUID | None = None   # terisi hanya kalau konflik BARU dibuat
+    new_trait_id: UUID | None = None  # trait nonaktif yang menunggu keputusan dosen
+
+
 LOAD_OVERRIDE_SQL = """
 select o.id, o.teacher_id, t.subject_id, ct.class_id, o.test_answer_id,
        o.reason, o.old_grade, o.new_grade, o.trait_processed_at
@@ -96,11 +105,10 @@ order by embedding <=> $3::vector
 limit $4
 """
 
-# class_id null -> trait berlaku untuk semua kelas di mata kuliah ini
 INSERT_TRAIT_SQL = """
 insert into teacher_traits (teacher_id, subject_id, class_id, category, aspect, "condition", direction,
-                            canonical_text, embedding, embedding_model, evidence_count, last_seen, source)
-values ($1, $2, null, $3, $4, $5, $6, $7, $8::vector, $9, 1, now(), 'learned')
+                            canonical_text, embedding, embedding_model, evidence_count,is_active, last_seen, source)
+values ($1, $2, null, $3, $4, $5, $6, $7, $8::vector, $9, 1, $10, now(), 'learned')
 returning id
 """
 
@@ -113,6 +121,7 @@ returning id
 
 CHECK_TRAIT_ACTIVE_SQL = """
 select id from teacher_traits where id = $1 and is_active
+for update 
 """
 
 INSERT_EVIDENCE_SQL = """
@@ -130,6 +139,23 @@ LOCK_OVERRIDE_SQL = """
 select trait_processed_at from grade_overrides where id = $1 for update
 """
 
+
+
+FIND_PENDING_CONFLICT_SQL = """
+ select id from trait_conflicts where old_trait_id = $1 and status = 'pending' limit 1
+"""
+
+INSERT_CONFLICT_SQL = """ 
+insert into trait_conflicts (teacher_id, old_trait_id, new_trait_id, override_id)
+values ($1, $2, $3, $4)
+returning id
+"""
+
+INSERT_NOTIFICATION_SQL = """
+insert into notifications (teacher_id, kind, title, body, payload, dedupe_key)
+values ($1, $2, $3, $4, $5::jsonb, $6)
+on conflict (teacher_id, dedupe_key) where dedupe_key is not null do nothing
+"""
 
 async def build_trait(ctx: dict, override_id: str) -> dict:
     try:
@@ -197,16 +223,22 @@ async def _process(ctx: dict, override_id: UUID) -> dict:
         decision = await _decide(llm, draft, similar)
 
 
-    trait_id = await _save(pool, override, draft, embedding, decision, embedder.model)
-    if trait_id is None:
+
+    saved = await _save(pool, override, draft, embedding, decision, embedder.model)
+    if saved is None:
         log.info("build_trait: already processed by another job, skip %s", override_id)
         return {"override_id": str(override_id), "skipped": "already_processed"}
 
-    log.info("build_trait: %s %s %s %s", override_id, decision.action, decision.relation, trait_id)
-    return {
+    log.info("build_trait: %s %s %s %s conflict=%s", override_id, saved.action, saved.relation,
+             saved.trait_id, saved.conflict_id)
+    result = {
         "override_id": str(override_id), "ok": True,
-        "action": decision.action, "relation": decision.relation, "trait_id": str(trait_id),
+        "action": saved.action, "relation": saved.relation, "trait_id": str(saved.trait_id),
     }
+    if saved.conflict_id is not None:
+        result["conflict_id"] = str(saved.conflict_id)
+        result["new_trait_id"] = str(saved.new_trait_id)
+    return result
 
 
 async def _load_override(pool: asyncpg.Pool, override_id: UUID) -> OverrideInfo | None:
@@ -314,7 +346,7 @@ async def _generate_trait(llm, override: OverrideInfo, context: dict) -> TraitDr
         aspect=_text(data, "aspect")[:200],
         condition=_text(data, "condition")[:500],
         direction=direction,
-        canonical_text=canonical,
+        canonical_text=canonical,q
     )
 
 
@@ -391,21 +423,42 @@ async def _decide(llm, draft: TraitDraft, similar: list[SimilarTrait]) -> TraitD
     return TraitDecision("insert", None, "support", "llm", s)
 
 
+CONFLICT_ACTIONS = ["keep_old", "replace", "keep_both"]
+
 async def _save(
     pool: asyncpg.Pool, override: OverrideInfo, draft: TraitDraft,
-    embedding: list[float], decision: TraitDecision, embedding_model: str,  
-) -> UUID | None:
+    embedding: list[float], decision: TraitDecision, embedding_model: str,
+) -> SaveResult | None:
     async with pool.acquire() as conn, conn.transaction():
         if await conn.fetchval(LOCK_OVERRIDE_SQL, override.id) is not None:
             return None
 
         trait_id = None
+        conflict_id = None
+        new_trait_id = None
         if decision.action == "update":
             if decision.relation == "support":
                 trait_id = await conn.fetchval(UPDATE_TRAIT_SQL, decision.trait_id)
             else:
-                # contradict: trait lama tidak diubah, cukup dicatat sebagai bukti tandingan
+                # contradict: trait lama dikunci (for update) dan tidak diubah
                 trait_id = await conn.fetchval(CHECK_TRAIT_ACTIVE_SQL, decision.trait_id)
+                # sudah ada konflik pending untuk trait lama -> cukup evidence (anti spam)
+                if trait_id is not None and await conn.fetchval(FIND_PENDING_CONFLICT_SQL, trait_id) is None:
+                    new_trait_id = await conn.fetchval(
+                        INSERT_TRAIT_SQL, override.teacher_id, override.subject_id,
+                        draft.category, draft.aspect, draft.condition, draft.direction, draft.canonical_text,
+                        to_pgvector(embedding), embedding_model, False,
+                    )
+                    conflict_id = await conn.fetchval(
+                        INSERT_CONFLICT_SQL, override.teacher_id, trait_id, new_trait_id, override.id)
+                    await conn.execute(
+                        INSERT_NOTIFICATION_SQL, override.teacher_id, "trait_conflict",
+                        "Koreksi baru bertentangan dengan kebiasaan menilai Anda",
+                        draft.canonical_text[:500],
+                        {"conflict_id": str(conflict_id), "old_trait_id": str(trait_id),
+                         "new_trait_id": str(new_trait_id), "actions": CONFLICT_ACTIONS},
+                        f"trait_conflict:{conflict_id}",
+                    )
             if trait_id is None:
                 decision = TraitDecision("insert", None, "support", decision.decided_by, decision.similarity)
 
@@ -413,10 +466,11 @@ async def _save(
             trait_id = await conn.fetchval(
                 INSERT_TRAIT_SQL, override.teacher_id, override.subject_id,
                 draft.category, draft.aspect, draft.condition, draft.direction, draft.canonical_text,
-                to_pgvector(embedding), embedding_model,
+                to_pgvector(embedding), embedding_model, True,
             )
 
+        # contradict: evidence dicatat ke trait LAMA (trait_id), bukan ke trait baru
         await conn.execute(INSERT_EVIDENCE_SQL, trait_id, override.id, override.teacher_id,
                            decision.similarity, decision.decided_by, decision.relation)
         await conn.execute(MARK_OVERRIDE_PROCESSED_SQL, override.id)
-        return trait_id
+        return SaveResult(trait_id, decision.action, decision.relation, conflict_id, new_trait_id)
