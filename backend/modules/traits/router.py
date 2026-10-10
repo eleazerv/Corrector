@@ -66,9 +66,15 @@ async def patchTrait (
     user: CurrentUser = TeacherUser,
     db: asyncpg.Pool = Depends(get_pool),
     llm=Depends(get_llm),
+    arq=Depends(get_arq),
 ):
-
-    return await service.patch_trait(db, llm, user.profile_id, trait_id, body)
+    trait = await service.patch_trait(db, llm, user.profile_id, trait_id, body)
+    if body.canonical_text is not None:
+        try:
+            await jobs.enqueue_embed_trait(arq, trait_id)
+        except Exception as e:
+            log.warning("patchTrait %s: failed to enqueue embed_trait: %s", trait_id, e)
+    return trait
 
 
 @router.get("/traits/{trait_id}/evidences")

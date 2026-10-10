@@ -13,6 +13,7 @@ from providers.storage import get_storage_provider
 
 
 from tasks.build_trait import build_trait
+from tasks.embed_trait import embed_trait 
 from tasks.grade_student import grade_student
 from tasks.ingest_zip import ingest_zip
 from tasks.maintenance import reconcile_status, refresh_plans, requeue_stuck , sweep_checkpoints
@@ -88,7 +89,7 @@ async def shutdown_ocr(ctx: dict) -> None:
     await _close_common(ctx)
     log.info("ocr worker stopped queue=%s", OCR_QUEUE)
 class WorkerSettings:
-    functions = [ingest_zip, grade_student, build_trait, summarize_complaint]
+    functions = [ingest_zip, grade_student, build_trait, embed_trait, summarize_complaint]
     cron_jobs = [
         cron(requeue_stuck, minute=set(range(0, 60, 5))),
         cron(reconcile_status, minute=set(range(0, 60, 10))),
