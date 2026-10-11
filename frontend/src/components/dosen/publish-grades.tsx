@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Eye, Inbox, Send } from "lucide-react";
 import { useData } from "@/lib/store";
-import { examMax, formatDateLong, scoreText, submissionAiTotal, submissionFinalTotal } from "@/lib/grading";
+import { examMax, formatDateLong, isConfirmed, scoreText, submissionAiTotal, submissionFinalTotal } from "@/lib/grading";
 import type { StudentViewSettings, Submission } from "@/lib/types";
 import { FileBadge } from "@/components/ui/badge";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -83,7 +83,7 @@ export function PublishGrades() {
             review > 0 ? (
               <Link
                 href={`/dosen/ujian/${exam.id}/review?filter=review`}
-                className="inline-flex min-h-11 items-center font-semibold text-primary underline underline-offset-4"
+                className="inline-flex min-h-11 items-center font-medium underline decoration-border-strong underline-offset-4 hover:decoration-current"
               >
                 Review sekarang
               </Link>
@@ -110,7 +110,7 @@ export function PublishGrades() {
             <label className="flex min-h-11 cursor-pointer items-center gap-2 font-semibold">
               <input
                 type="checkbox"
-                className="h-5 w-5 accent-primary"
+                className="h-5 w-5 accent-ink"
                 checked={allPicked}
                 disabled={eligible.length === 0}
                 onChange={() => setPicked(allPicked ? new Set() : new Set(eligible.map((s) => s.id)))}
@@ -144,7 +144,7 @@ export function PublishGrades() {
                     <td data-label="Pilih">
                       <input
                         type="checkbox"
-                        className="h-5 w-5 accent-primary"
+                        className="h-5 w-5 accent-ink"
                         aria-label={`Pilih ${st.name}`}
                         checked={!why && picked.has(s.id)}
                         disabled={Boolean(why)}
@@ -159,7 +159,7 @@ export function PublishGrades() {
                     <td data-label="Saran AI" className="num text-text-muted">
                       {graded ? scoreText(submissionAiTotal(s), max) : "–"}
                     </td>
-                    <td data-label="Nilai Final" className="num font-semibold text-primary">
+                    <td data-label="Nilai Final" className={`num font-semibold ${graded && s.grades.every(isConfirmed) ? "text-ink" : "text-text"}`}>
                       {graded ? scoreText(submissionFinalTotal(s), max) : "–"}
                     </td>
                     <td data-label="Status">
@@ -169,7 +169,7 @@ export function PublishGrades() {
                           <button
                             type="button"
                             onClick={() => setPreview(s)}
-                            className="min-h-11 text-small font-semibold text-primary underline-offset-4 hover:underline md:min-h-0"
+                            className="min-h-11 text-small font-medium underline decoration-border-strong underline-offset-4 hover:decoration-current md:min-h-0"
                           >
                             Pratinjau
                           </button>
@@ -184,8 +184,8 @@ export function PublishGrades() {
         </section>
 
         <aside className="space-y-6 self-start">
-          <section aria-labelledby="tampilan" className="rounded-md border border-border bg-surface px-4 py-2">
-            <h2 id="tampilan" className="pt-2 font-body text-h3 font-bold">
+          <section aria-labelledby="tampilan" className="rounded-lg border border-border bg-surface px-4 py-2">
+            <h2 id="tampilan" className="pt-2 font-body text-h3 font-semibold">
               Yang dilihat mahasiswa
             </h2>
             <div className="divide-y divide-border">

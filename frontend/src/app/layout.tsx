@@ -1,25 +1,24 @@
 import type { Metadata } from "next";
-import { Source_Code_Pro, Source_Sans_3, Source_Serif_4 } from "next/font/google";
-import { DataProvider } from "@/lib/store";
-import { ToastProvider } from "@/components/ui/toast";
+import { Plus_Jakarta_Sans, Roboto_Mono } from "next/font/google";
+import { AuthProvider } from "@/lib/auth";
+import { ToastProvider } from "@/components/kit/toast";
 import "./globals.css";
 
-const serif = Source_Serif_4({ variable: "--font-source-serif", subsets: ["latin"], weight: ["600"] });
-const sans = Source_Sans_3({ variable: "--font-source-sans", subsets: ["latin"], weight: ["400", "600", "700"] });
-const mono = Source_Code_Pro({ variable: "--font-source-code", subsets: ["latin"], weight: ["400"] });
+const sans = Plus_Jakarta_Sans({ variable: "--font-jakarta", subsets: ["latin"] });
+const mono = Roboto_Mono({ variable: "--font-roboto-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Corrector: Penilaian Ujian",
-  description: "Penilaian jawaban ujian dengan saran AI yang direview dan diputuskan oleh dosen.",
+  title: "Corrector",
+  description: "Penilaian jawaban ujian: AI memberi saran, dosen memutuskan.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="id" className={`${serif.variable} ${sans.variable} ${mono.variable}`}>
+    <html lang="id" className={`${sans.variable} ${mono.variable}`}>
       <body className="antialiased">
-        <DataProvider>
+        <AuthProvider>
           <ToastProvider>{children}</ToastProvider>
-        </DataProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -169,7 +169,7 @@ function ExamsTab({ classId, onCreate }: { classId: string; onCreate: () => void
           return (
             <tr key={e.id}>
               <td data-label="Ujian">
-                <Link href={`/dosen/ujian/${e.id}/${first}`} className="font-semibold text-primary underline-offset-4 hover:underline">
+                <Link href={`/dosen/ujian/${e.id}/${first}`} className="font-medium underline decoration-border-strong underline-offset-4 hover:decoration-current">
                   {e.title}
                 </Link>
                 <span className="block text-small text-text-muted">Nilai maksimum {examMax(e)}</span>
@@ -240,7 +240,7 @@ function AddStudentModal({ cls, open, onClose }: { cls: ClassRoom; open: boolean
             aria-describedby={describedBy("mhs-name", false, errors.name)}
           />
         </Field>
-        <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-between">
+        <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
           <Button onClick={close}>Batal</Button>
           <Button type="submit" variant="primary">
             Simpan Mahasiswa
@@ -445,7 +445,7 @@ function CreateExamModal({ classId, open, onClose }: { classId: string; open: bo
             aria-describedby={describedBy("ujian-title", true, error)}
           />
         </Field>
-        <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-between">
+        <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
           <Button onClick={close}>Batal</Button>
           <Button type="submit" variant="primary">
             Buat Ujian

@@ -1,5 +1,5 @@
-import { PublishGrades } from "@/components/dosen/publish-grades";
+import { PublishStep } from "@/components/exam/publish-step";
 
 export default function Page() {
-  return <PublishGrades />;
+  return <PublishStep />;
 }

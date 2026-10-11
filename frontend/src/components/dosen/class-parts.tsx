@@ -47,7 +47,7 @@ export function ClassTable({ onCreate }: { onCreate: () => void }) {
         {data.classes.map((c) => (
           <tr key={c.id}>
             <td data-label="Kelas">
-              <Link href={`/dosen/kelas/${c.id}`} className="font-semibold text-primary underline-offset-4 hover:underline">
+              <Link href={`/dosen/kelas/${c.id}`} className="font-medium underline decoration-border-strong underline-offset-4 hover:decoration-current">
                 {c.name}
               </Link>
             </td>
@@ -138,7 +138,7 @@ export function CreateClassModal({ open, onClose }: { open: boolean; onClose: ()
             onChange={set("description")}
           />
         </Field>
-        <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-between">
+        <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
           <Button onClick={close}>Batal</Button>
           <Button type="submit" variant="primary">
             Simpan Kelas

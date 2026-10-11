@@ -37,7 +37,7 @@ export function ExamFrame({ examId, children }: { examId: string; children: Reac
 
   return (
     <ExamContext.Provider value={{ exam, cls }}>
-      <div className={wide ? "w-full" : "mx-auto w-full max-w-[1200px]"}>
+      <div className={wide ? "w-full" : "mx-auto w-full max-w-[1120px]"}>
         <PageHeader
           crumbs={[
             { href: "/dosen", label: "Dashboard" },
@@ -49,7 +49,7 @@ export function ExamFrame({ examId, children }: { examId: string; children: Reac
         >
           <Stepper stage={exam.stage} />
         </PageHeader>
-        <nav aria-label="Bagian ujian" className="-mt-4 mb-8 grid grid-cols-2 border-b border-border sm:flex">
+        <nav aria-label="Bagian ujian" className="mb-6 grid grid-cols-2 gap-x-2 border-b border-border sm:flex">
           {SECTIONS.map((s) => {
             const active = s === current;
             return (
@@ -57,8 +57,8 @@ export function ExamFrame({ examId, children }: { examId: string; children: Reac
                 key={s.slug}
                 href={`/dosen/ujian/${exam.id}/${s.slug}`}
                 aria-current={active ? "page" : undefined}
-                className={`-mb-px inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap border-b-2 px-4 sm:justify-start font-semibold ${
-                  active ? "border-primary text-primary" : "border-transparent text-text-muted hover:text-text"
+                className={`-mb-px inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap border-b-2 px-3 font-medium sm:justify-start ${
+                  active ? "border-text text-text" : "border-transparent text-text-muted hover:text-text"
                 }`}
               >
                 {s.label}

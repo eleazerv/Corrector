@@ -1,11 +1,9 @@
-import { LoaderCircle } from "lucide-react";
-import { Icon } from "@/components/ui/icon";
+import { Loading } from "@/components/kit/status";
 
-export default function Loading() {
+export default function RouteLoading() {
   return (
-    <p role="status" className="flex items-center gap-2 px-4 py-16 text-text-muted sm:px-8">
-      <Icon icon={LoaderCircle} className="animate-spin" />
-      Memuat halaman…
-    </p>
+    <main className="mx-auto max-w-5xl px-4 sm:px-6">
+      <Loading what="halaman" />
+    </main>
   );
 }

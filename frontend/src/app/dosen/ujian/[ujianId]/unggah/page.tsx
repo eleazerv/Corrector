@@ -1,5 +1,6 @@
-import { BatchUpload } from "@/components/dosen/batch-upload";
+import { UploadStep } from "@/components/exam/upload-step";
 
-export default function Page() {
-  return <BatchUpload />;
+export default async function Page(props: PageProps<"/dosen/ujian/[ujianId]/unggah">) {
+  const { nim } = await props.searchParams;
+  return <UploadStep initialNim={typeof nim === "string" ? nim : undefined} />;
 }

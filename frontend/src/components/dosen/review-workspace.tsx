@@ -2,14 +2,13 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Eye, FileText, Inbox, PencilLine, ScanSearch } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Inbox, PencilLine } from "lucide-react";
 import { useData } from "@/lib/store";
-import { aiScore, finalScore, scoreText, submissionFinalTotal, examMax } from "@/lib/grading";
+import { FILE_STATUS, aiScore, finalScore, isConfirmed, scoreText, submissionFinalTotal, examMax } from "@/lib/grading";
 import type { Evidence, Grade, Question, Submission } from "@/lib/types";
-import { FileBadge } from "@/components/ui/badge";
+import { Badge, FileBadge } from "@/components/ui/badge";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Field, FieldError, describedBy, inputClass, textareaClass } from "@/components/ui/form";
-import { Icon } from "@/components/ui/icon";
 import { ConfirmModal, Modal } from "@/components/ui/modal";
 import { Banner, EmptyState, InternalPanel } from "@/components/ui/panels";
 import { AiScoreCard, FinalScoreCard } from "@/components/ui/score-cards";
@@ -18,7 +17,13 @@ import { useToast } from "@/components/ui/toast";
 import { GradeSheet } from "@/components/mahasiswa/grade-sheet";
 import { useExam } from "./exam-frame";
 
-type Pane = "jawaban" | "ocr" | "penilaian";
+type Pane = "jawaban" | "penilaian";
+
+/** Shortcuts are ignored while typing or while a dialog is open. */
+function isTyping(e: KeyboardEvent) {
+  const t = e.target as HTMLElement;
+  return Boolean(t.closest("input, textarea, select, [contenteditable], dialog")) || e.metaKey || e.ctrlKey || e.altKey;
+}
 
 export function ReviewWorkspace() {
   const { exam } = useExam();
@@ -30,6 +35,7 @@ export function ReviewWorkspace() {
   const all = data.submissions.filter(
     (s) => s.examId === exam.id && s.studentId && !["uploaded", "processing"].includes(s.status),
   );
+  const reviewCount = all.filter((s) => s.status === "review_required").length;
   // The open answer stays in the filtered list after it is reviewed, so the lecturer sees the
   // result of their decision instead of jumping to the next student.
   const pinned = params.get("s");
@@ -55,9 +61,7 @@ export function ReviewWorkspace() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const t = e.target as HTMLElement;
-      if (t.closest("input, textarea, select, [contenteditable], dialog")) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTyping(e)) return;
       if ((e.key === "j" || e.key === "J") && index < list.length - 1) go({ s: list[index + 1].id });
       if ((e.key === "k" || e.key === "K") && index > 0) go({ s: list[index - 1].id });
     }
@@ -77,57 +81,120 @@ export function ReviewWorkspace() {
     );
   }
 
+  const nameOf = (s: Submission) => data.students.find((x) => x.id === s.studentId);
+
   return (
     <div>
-      {!current ? (
-        <EmptyState
-          icon={Inbox}
-          title="Semua jawaban yang ditandai sudah direview."
-          action={<Button onClick={() => go({ filter: "all" })}>Tampilkan Semua Jawaban</Button>}
-        >
-          Tidak ada lagi jawaban berstatus Perlu Review. Lanjutkan ke Publikasi bila semua nilai final sudah benar.
-        </EmptyState>
-      ) : (
-        <SubmissionReview key={current.id} sub={current} />
-      )}
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface p-2">
+        <div role="group" aria-label="Saring jawaban" className="flex rounded-md bg-bg p-0.5">
+          {[
+            { id: "all", label: "Semua", n: all.length },
+            { id: "review", label: "Perlu Review", n: reviewCount },
+          ].map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              aria-pressed={filter === f.id}
+              onClick={() => go({ filter: f.id })}
+              className={`inline-flex min-h-11 items-center gap-1.5 rounded-[5px] px-3 text-small font-medium md:min-h-8 ${
+                filter === f.id ? "bg-surface text-text shadow-sm ring-1 ring-border" : "text-text-muted hover:text-text"
+              }`}
+            >
+              {f.label}
+              <span className="tabular text-text-muted">{f.n}</span>
+            </button>
+          ))}
+        </div>
 
-      <nav
-        aria-label="Navigasi antar-mahasiswa"
-        className="sticky bottom-0 z-10 mt-6 -mx-4 flex flex-wrap items-center gap-3 border-t border-border bg-surface px-4 py-3 sm:-mx-8 sm:px-8"
-      >
-        <Button
-          compact
-          icon={ChevronLeft}
-          disabled={!current || index === 0}
-          onClick={() => go({ s: list[index - 1].id })}
-          title="Pintasan: K"
-          aria-keyshortcuts="K"
-        >
-          Sebelumnya
-        </Button>
-        <p className="tabular text-center font-semibold" aria-live="polite">
-          {current ? `Mahasiswa ${index + 1} dari ${list.length}` : `0 dari 0`}
-        </p>
-        <Button
-          compact
-          disabled={!current || index >= list.length - 1}
-          onClick={() => go({ s: list[index + 1].id })}
-          title="Pintasan: J"
-          aria-keyshortcuts="J"
-        >
-          Berikutnya
-          <Icon icon={ChevronRight} />
-        </Button>
-        <p className="hidden text-small text-text-muted xl:block">Pintasan keyboard: J berikutnya, K sebelumnya</p>
-        <label className="ml-auto flex items-center gap-2">
-          <span className="font-semibold">Filter</span>
-          <select className={`${inputClass} w-auto`} value={filter} onChange={(e) => go({ filter: e.target.value })}>
-            <option value="all">Semua ({all.length})</option>
-            <option value="review">Perlu Review ({all.filter((s) => s.status === "review_required").length})</option>
+        <label className="min-w-0 flex-1 xl:hidden">
+          <span className="sr-only">Pilih mahasiswa</span>
+          <select className={inputClass} value={current?.id ?? ""} onChange={(e) => go({ s: e.target.value })}>
+            {list.map((s, i) => (
+              <option key={s.id} value={s.id}>
+                {i + 1}. {nameOf(s)?.name} ({FILE_STATUS[s.status].label})
+              </option>
+            ))}
           </select>
         </label>
-      </nav>
 
+        <div className="ml-auto flex items-center gap-2">
+          <span className="hidden items-center gap-1.5 text-small text-text-muted lg:flex">
+            <kbd>J</kbd>
+            <kbd>K</kbd> pindah
+            <span className="mx-1 text-border-strong">|</span>
+            <kbd>A</kbd> setujui
+            <span className="mx-1 text-border-strong">|</span>
+            <kbd>E</kbd> ubah nilai
+          </span>
+          <Button
+            compact
+            icon={ChevronLeft}
+            disabled={!current || index === 0}
+            onClick={() => go({ s: list[index - 1].id })}
+            aria-label="Mahasiswa sebelumnya"
+            aria-keyshortcuts="K"
+            title="Sebelumnya (K)"
+          />
+          <span className="tabular min-w-14 text-center text-small font-medium" aria-live="polite">
+            {current ? `${index + 1} / ${list.length}` : "0 / 0"}
+          </span>
+          <Button
+            compact
+            icon={ChevronRight}
+            disabled={!current || index >= list.length - 1}
+            onClick={() => go({ s: list[index + 1].id })}
+            aria-label="Mahasiswa berikutnya"
+            aria-keyshortcuts="J"
+            title="Berikutnya (J)"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[240px_minmax(0,1fr)]">
+        <nav aria-label="Antrean jawaban" className="hidden self-start xl:sticky xl:top-4 xl:block">
+          <ol className="max-h-[calc(100dvh-120px)] space-y-0.5 overflow-y-auto p-0.5">
+            {list.map((s) => {
+              const st = nameOf(s);
+              const active = s.id === current?.id;
+              const graded = s.grades.length > 0;
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    aria-current={active ? "true" : undefined}
+                    onClick={() => go({ s: s.id })}
+                    className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left ${
+                      active ? "bg-surface shadow-sm ring-1 ring-border" : "hover:bg-surface/70"
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-small font-medium">{st?.name}</span>
+                      <span className="mt-1 block">
+                        <FileBadge status={s.status} />
+                      </span>
+                    </span>
+                    <span className="tabular text-small text-text-muted">{graded ? submissionFinalTotal(s) : "–"}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+
+        <div className="min-w-0">
+          {!current ? (
+            <EmptyState
+              icon={Inbox}
+              title="Semua jawaban yang ditandai sudah direview."
+              action={<Button onClick={() => go({ filter: "all" })}>Tampilkan Semua Jawaban</Button>}
+            >
+              Tidak ada lagi jawaban berstatus Perlu Review. Lanjutkan ke Publikasi bila semua nilai final sudah benar.
+            </EmptyState>
+          ) : (
+            <SubmissionReview key={current.id} sub={current} />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -136,6 +203,7 @@ function SubmissionReview({ sub }: { sub: Submission }) {
   const { exam } = useExam();
   const { data } = useData();
   const [pane, setPane] = useState<Pane>("penilaian");
+  const [view, setView] = useState<"ocr" | "gambar">("ocr");
   const [qid, setQid] = useState(exam.questions[0]?.id);
   const [activeEv, setActiveEv] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
@@ -148,7 +216,8 @@ function SubmissionReview({ sub }: { sub: Submission }) {
 
   function showEvidence(ev: Evidence) {
     setActiveEv(ev.id);
-    setPane("ocr");
+    setView("ocr");
+    setPane("jawaban");
     requestAnimationFrame(() => {
       const el = document.getElementById(`ev-${ev.id}`);
       if (!el) return;
@@ -159,17 +228,17 @@ function SubmissionReview({ sub }: { sub: Submission }) {
     });
   }
 
-  const paneCls = (p: Pane) => `${pane === p ? "block" : "hidden"} xl:block min-w-0`;
+  const paneCls = (p: Pane) => `${pane === p ? "block" : "hidden"} lg:block min-w-0`;
 
   return (
     <div>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-h2">{student ? student.name : "Belum dipetakan"}</h2>
-          <p className="flex flex-wrap items-center gap-2 text-text-muted">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-h1">{student ? student.name : "Belum dipetakan"}</h2>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-small text-text-muted">
             <span className="tabular">{student?.nim}</span>
             <span aria-hidden="true">•</span>
-            <span className="font-mono text-small">{sub.fileName}</span>
+            <span className="font-mono">{sub.fileName}</span>
             <FileBadge status={sub.status} />
           </p>
         </div>
@@ -177,7 +246,9 @@ function SubmissionReview({ sub }: { sub: Submission }) {
           <div className="flex items-center gap-4">
             <p className="text-right">
               <span className="block text-small text-text-muted">Total nilai final</span>
-              <span className="tabular text-score-md font-bold text-primary">
+              <span
+                className={`tabular text-score-md font-semibold ${sub.grades.every(isConfirmed) ? "text-ink" : "text-text"}`}
+              >
                 {scoreText(submissionFinalTotal(sub), examMax(exam))}
               </span>
             </p>
@@ -193,29 +264,34 @@ function SubmissionReview({ sub }: { sub: Submission }) {
           {exam.questions.map((q) => {
             const g = sub.grades.find((x) => x.questionId === q.id);
             const open = g && g.reviewRequired && !g.override && !g.approved;
+            const sel = q.id === question?.id;
             return (
               <button
                 key={q.id}
                 type="button"
-                aria-pressed={q.id === question?.id}
+                aria-pressed={sel}
                 onClick={() => {
                   setQid(q.id);
                   setActiveEv(null);
                 }}
-                className={`min-h-11 rounded-md border px-4 font-semibold ${
-                  q.id === question?.id ? "border-primary bg-primary text-white" : "border-border bg-surface hover:border-primary"
+                className={`inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-small font-medium md:min-h-9 ${
+                  sel ? "border-primary bg-primary text-white" : "border-border bg-surface hover:border-border-strong"
                 }`}
               >
                 Soal {q.number}
-                {g && <span className="tabular ml-2 font-normal">{scoreText(finalScore(g), q.maxScore)}</span>}
-                {open && <span className="ml-2 font-normal">(perlu review)</span>}
+                {g && (
+                  <span className={`tabular ${sel ? "text-white/85" : "text-text-muted"}`}>
+                    {scoreText(finalScore(g), q.maxScore)}
+                  </span>
+                )}
+                {open && <span className={sel ? "text-white/85" : "text-warning"}>perlu review</span>}
               </button>
             );
           })}
         </div>
       )}
 
-      <div className="xl:hidden">
+      <div className="lg:hidden">
         <Tabs
           group="review"
           label="Area review"
@@ -223,48 +299,72 @@ function SubmissionReview({ sub }: { sub: Submission }) {
           onChange={(id) => setPane(id as Pane)}
           tabs={[
             { id: "jawaban", label: "Jawaban" },
-            { id: "ocr", label: "OCR" },
             { id: "penilaian", label: "Penilaian" },
           ]}
         />
       </div>
 
-      <div className="mt-4 grid gap-5 xl:mt-0 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(380px,1.15fr)]">
-        <section role="tabpanel" id={panelId("review", "jawaban")} aria-labelledby={tabId("review", "jawaban")} className={paneCls("jawaban")}>
-          <PaneTitle icon={FileText}>Gambar jawaban</PaneTitle>
-          <div className="rounded-md border border-border bg-surface p-4">
-            <p className="text-small text-text-muted">
-              Halaman {page?.page ?? 1} dari {Math.max(sub.pages.length, 1)} • <span className="font-mono">{sub.fileName}</span>
-            </p>
-            <div
-              role="img"
-              aria-label={`Jawaban Soal ${question?.number}, halaman ${page?.page ?? 1}, milik ${student?.nim ?? "mahasiswa belum dipetakan"}`}
-              className="mt-3 flex aspect-[1/1.3] items-center justify-center rounded-sm border border-dashed border-border-strong bg-bg p-6 text-center text-text-muted"
-            >
-              <span>
-                [Gambar jawaban asli]
-                <br />
-                <span className="text-small">
-                  Pratinjau file belum tersedia di prototipe. Bukti jawaban ditandai pada teks OCR.
-                </span>
+      <div className="mt-4 grid gap-5 lg:mt-0 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
+        <section
+          role="tabpanel"
+          id={panelId("review", "jawaban")}
+          aria-labelledby={tabId("review", "jawaban")}
+          className={paneCls("jawaban")}
+        >
+          <div className="overflow-hidden rounded-lg border border-border bg-surface lg:sticky lg:top-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-3 py-2">
+              <div role="group" aria-label="Tampilan jawaban" className="flex rounded-md bg-bg p-0.5">
+                {(
+                  [
+                    ["ocr", "Teks OCR"],
+                    ["gambar", "Gambar asli"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={view === id}
+                    onClick={() => setView(id)}
+                    className={`min-h-11 rounded-[5px] px-3 text-small font-medium md:min-h-8 ${
+                      view === id ? "bg-surface shadow-sm ring-1 ring-border" : "text-text-muted hover:text-text"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-small text-text-muted">
+                Halaman {page?.page ?? 1} dari {Math.max(sub.pages.length, 1)}
               </span>
+            </div>
+            <div className="p-5">
+              {view === "gambar" ? (
+                <div
+                  role="img"
+                  aria-label={`Jawaban Soal ${question?.number}, halaman ${page?.page ?? 1}, milik ${student?.nim ?? "mahasiswa belum dipetakan"}`}
+                  className="flex aspect-[1/1.2] items-center justify-center rounded-md border border-dashed border-border-strong bg-bg p-6 text-center text-text-muted"
+                >
+                  <span>
+                    [Gambar jawaban asli]
+                    <br />
+                    <span className="text-small">Pratinjau file belum tersedia di prototipe. Bukti ditandai pada Teks OCR.</span>
+                  </span>
+                </div>
+              ) : failed || !page ? (
+                <p className="text-text-muted">Tidak ada teks OCR untuk file ini.</p>
+              ) : (
+                <OcrText paragraphs={page.paragraphs} evidence={grade?.evidence ?? []} activeId={activeEv} />
+              )}
             </div>
           </div>
         </section>
 
-        <section role="tabpanel" id={panelId("review", "ocr")} aria-labelledby={tabId("review", "ocr")} className={paneCls("ocr")}>
-          <PaneTitle icon={ScanSearch}>Teks OCR</PaneTitle>
-          <div className="rounded-md border border-border bg-surface p-4">
-            {failed || !page ? (
-              <p className="text-text-muted">Tidak ada teks OCR untuk file ini.</p>
-            ) : (
-              <OcrText paragraphs={page.paragraphs} evidence={grade?.evidence ?? []} activeId={activeEv} />
-            )}
-          </div>
-        </section>
-
-        <section role="tabpanel" id={panelId("review", "penilaian")} aria-labelledby={tabId("review", "penilaian")} className={paneCls("penilaian")}>
-          <PaneTitle icon={PencilLine}>Penilaian</PaneTitle>
+        <section
+          role="tabpanel"
+          id={panelId("review", "penilaian")}
+          aria-labelledby={tabId("review", "penilaian")}
+          className={paneCls("penilaian")}
+        >
           {failed ? (
             <Banner
               tone="danger"
@@ -282,12 +382,11 @@ function SubmissionReview({ sub }: { sub: Submission }) {
       </div>
 
       <Modal open={preview} onClose={() => setPreview(false)} title="Pratinjau tampilan mahasiswa" size="lg">
-        <div className="rounded-md border-2 border-success p-1">
-          <p className="px-3 py-2 text-small font-semibold text-success">
-            Pratinjau Tampilan Mahasiswa: persis yang dilihat {student?.name ?? "mahasiswa"} setelah publikasi.
-          </p>
-          <PreviewSheet sub={sub} />
-        </div>
+        <p className="mb-3 flex flex-wrap items-center gap-2 text-small text-text-muted">
+          <Badge tone="success">Pratinjau Tampilan Mahasiswa</Badge>
+          persis yang dilihat {student?.name ?? "mahasiswa"} setelah publikasi.
+        </p>
+        <PreviewSheet sub={sub} />
       </Modal>
     </div>
   );
@@ -298,19 +397,10 @@ export function PreviewSheet({ sub }: { sub: Submission }) {
   return <GradeSheet exam={exam} cls={cls} submission={sub} />;
 }
 
-function PaneTitle({ icon, children }: { icon: typeof FileText; children: ReactNode }) {
-  return (
-    <h3 className="mb-2 hidden items-center gap-2 text-h3 font-bold xl:flex">
-      <Icon icon={icon} className="text-primary" />
-      {children}
-    </h3>
-  );
-}
-
 /** Highlights evidence quotes inside OCR paragraphs, numbered so meaning never rests on color alone. */
 function OcrText({ paragraphs, evidence, activeId }: { paragraphs: string[]; evidence: Evidence[]; activeId: string | null }) {
   return (
-    <div className="space-y-4 font-mono text-small leading-6">
+    <div className="max-w-[68ch] space-y-5 font-mono text-[14px] leading-7">
       {paragraphs.map((text, pi) => {
         const marks = evidence
           .map((e, n) => ({ e, n: n + 1, at: e.paragraph === pi ? text.indexOf(e.quote) : -1 }))
@@ -327,9 +417,9 @@ function OcrText({ paragraphs, evidence, activeId }: { paragraphs: string[]; evi
               id={`ev-${m.e.id}`}
               className={`rounded-sm bg-highlight px-0.5 text-text underline decoration-2 underline-offset-4 ${
                 m.e.effect === "plus" ? "decoration-success" : "decoration-danger"
-              } ${activeId === m.e.id ? "outline-2 outline-primary" : ""}`}
+              } ${activeId === m.e.id ? "outline-2 outline-ink" : ""}`}
             >
-              <span className="mr-1 inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-text px-1 font-body text-[13px] font-bold leading-none text-white">
+              <span className="mr-1 inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-text px-1 font-body text-[13px] font-semibold leading-none text-white">
                 {m.n}
               </span>
               {m.e.quote}
@@ -369,6 +459,25 @@ function GradePanel({
   const published = sub.status === "published";
   const open = grade.reviewRequired && !grade.override && !grade.approved;
   const current = grade.override?.criterionScores ?? grade.aiCriterionScores;
+  const canApprove = !grade.override && !grade.approved;
+
+  function approve() {
+    dispatch({ type: "approve", submissionId: sub.id, questionId: question.id });
+    toast({ tone: "success", text: `Saran AI Soal ${question.number} disetujui sebagai nilai final.` });
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (isTyping(e) || editing) return;
+      if ((e.key === "a" || e.key === "A") && canApprove) approve();
+      if (e.key === "e" || e.key === "E") {
+        e.preventDefault();
+        setEditing(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   return (
     <div className="space-y-5">
@@ -382,8 +491,8 @@ function GradePanel({
       </div>
 
       {grade.override && (
-        <div className="rounded-md border border-border bg-surface px-4 py-3">
-          <p className="font-semibold">Alasan perubahan</p>
+        <div className="rounded-lg border border-[#c9d4f6] bg-ink-soft px-4 py-3">
+          <p className="text-small font-medium text-ink">Alasan perubahan</p>
           <p className="mt-1">{grade.override.reason}</p>
           {!published && (
             <Button variant="tertiary" compact className="-ml-2 mt-1" onClick={() => setConfirmCancel(true)}>
@@ -426,7 +535,7 @@ function GradePanel({
                   <td data-label="Saran AI" className="num text-text-muted">
                     {scoreText(grade.aiCriterionScores[c.id] ?? 0, c.max)}
                   </td>
-                  <td data-label="Final" className="num font-semibold text-primary">
+                  <td data-label="Final" className={`num font-semibold ${grade.override || grade.approved ? "text-ink" : "text-text"}`}>
                     {scoreText(current[c.id] ?? 0, c.max)}
                   </td>
                 </tr>
@@ -439,17 +548,16 @@ function GradePanel({
               variant={open ? "primary" : "secondary"}
               icon={PencilLine}
               onClick={() => setEditing(true)}
+              aria-keyshortcuts="E"
+              className="flex-1"
             >
               Ubah Nilai
+              <kbd className="hidden lg:inline-flex">E</kbd>
             </Button>
-            {!grade.override && !grade.approved && (
-              <Button
-                onClick={() => {
-                  dispatch({ type: "approve", submissionId: sub.id, questionId: question.id });
-                  toast({ tone: "success", text: `Saran AI Soal ${question.number} disetujui sebagai nilai final.` });
-                }}
-              >
+            {canApprove && (
+              <Button onClick={approve} aria-keyshortcuts="A" className="flex-1">
                 Setujui Nilai AI
+                <kbd className="hidden lg:inline-flex">A</kbd>
               </Button>
             )}
           </div>
@@ -457,7 +565,7 @@ function GradePanel({
       )}
 
       <section aria-labelledby="bukti">
-        <h4 id="bukti" className="font-semibold">
+        <h4 id="bukti" className="font-medium">
           Bukti jawaban
         </h4>
         {grade.evidence.length === 0 ? (
@@ -469,9 +577,9 @@ function GradePanel({
                 <button
                   type="button"
                   onClick={() => onEvidence(e)}
-                  className="flex min-h-11 w-full items-start gap-3 rounded-md border border-border bg-surface px-3 py-2 text-left hover:border-primary"
+                  className="flex min-h-11 w-full items-start gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left hover:border-border-strong"
                 >
-                  <span className="mt-0.5 inline-flex h-6 min-w-6 items-center justify-center rounded-sm bg-text text-small font-bold text-white">
+                  <span className="mt-0.5 inline-flex h-6 min-w-6 items-center justify-center rounded-sm bg-text text-small font-semibold text-white">
                     {i + 1}
                   </span>
                   <span>
@@ -491,8 +599,8 @@ function GradePanel({
         <p>{grade.reasoning}</p>
       </InternalPanel>
 
-      <section aria-labelledby="umpan" className="rounded-md border border-border bg-surface px-4 py-3">
-        <h4 id="umpan" className="font-semibold">
+      <section aria-labelledby="umpan" className="rounded-lg border border-border bg-surface px-4 py-3">
+        <h4 id="umpan" className="font-medium">
           Umpan balik untuk mahasiswa
         </h4>
         <p className="mt-1">{grade.studentFeedback}</p>
@@ -558,8 +666,8 @@ function OverrideForm({
   }
 
   return (
-    <form onSubmit={submit} noValidate className="space-y-4 rounded-md border-2 border-primary bg-surface p-4">
-      <h4 className="text-h3 font-bold">Ubah nilai Soal {question.number}</h4>
+    <form onSubmit={submit} noValidate className="space-y-4 rounded-lg border-2 border-ink bg-surface p-4">
+      <h4 className="text-h3 font-semibold">Ubah nilai Soal {question.number}</h4>
       {published && (
         <Banner tone="info">Nilai ini sudah dipublikasikan. Perubahan akan terlihat mahasiswa dan tercatat di riwayat revisi.</Banner>
       )}
@@ -613,7 +721,7 @@ function OverrideForm({
           type="checkbox"
           checked={remember}
           onChange={(e) => setRemember(e.target.checked)}
-          className="mt-1 h-5 w-5 accent-primary"
+          className="mt-1 h-5 w-5 accent-ink"
         />
         <span>
           <span className="block font-semibold">Simpan sebagai catatan penilaian</span>
@@ -622,9 +730,9 @@ function OverrideForm({
           </span>
         </span>
       </label>
-      <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-between">
+      <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
         <Button onClick={onCancel}>Batal</Button>
-        <Button type="submit" variant="primary" disabled={!valid || !reason.trim()}>
+        <Button type="submit" variant="publish" disabled={!valid || !reason.trim()}>
           Simpan Perubahan
         </Button>
       </div>
@@ -638,6 +746,7 @@ function OverrideForm({
         }}
         title={`Simpan perubahan nilai Soal ${question.number}?`}
         confirmLabel="Simpan Perubahan"
+        variant="publish"
       >
         <p className="tabular">
           Nilai berubah dari {scoreText(finalScore(grade), question.maxScore)} menjadi {scoreText(newTotal, question.maxScore)}.

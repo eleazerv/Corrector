@@ -139,7 +139,7 @@ export function BatchUpload() {
           tone="warning"
           title="Ujian ini belum punya soal dan rubrik."
           action={
-            <Link href={`/dosen/ujian/${exam.id}/rubrik`} className="font-semibold text-primary underline underline-offset-4">
+            <Link href={`/dosen/ujian/${exam.id}/rubrik`} className="font-medium underline decoration-border-strong underline-offset-4 hover:decoration-current">
               Lengkapi rubrik
             </Link>
           }
@@ -166,7 +166,7 @@ export function BatchUpload() {
           } ${locked ? "opacity-60" : ""}`}
         >
           <Icon icon={FileUp} size={40} className="text-primary" />
-          <p className="mt-3 text-h3 font-bold">Seret file foto/PDF ke sini</p>
+          <p className="mt-3 text-h3 font-semibold">Seret file foto/PDF ke sini</p>
           <p className="text-text-muted">atau</p>
           <Button className="mt-2" disabled={locked} onClick={() => inputRef.current?.click()}>
             Pilih File
@@ -184,7 +184,7 @@ export function BatchUpload() {
           <p className="mt-4 text-small text-text-muted">JPG, PNG, atau PDF. Maksimum {MAX_MB} MB per file.</p>
         </div>
 
-        <fieldset className="rounded-md border border-border bg-surface p-4">
+        <fieldset className="rounded-lg border border-border bg-surface p-4">
           <legend className="px-1 font-semibold">Cara memetakan file ke mahasiswa</legend>
           <div className="mt-1 space-y-1">
             {METHODS.map((m) => (
@@ -199,7 +199,7 @@ export function BatchUpload() {
                   checked={method === m.id}
                   disabled={m.soon}
                   onChange={() => setMethod(m.id)}
-                  className="mt-1 h-5 w-5 accent-primary"
+                  className="mt-1 h-5 w-5 accent-ink"
                 />
                 <span>
                   <span className="block font-semibold">{m.label}</span>
@@ -222,10 +222,10 @@ export function BatchUpload() {
       )}
 
       {subs.length > 0 && (
-        <section aria-labelledby="progres" className="rounded-md border border-border bg-surface p-4 sm:p-5">
+        <section aria-labelledby="progres" className="rounded-lg border border-border bg-surface p-4 sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex-1">
-              <h2 id="progres" className="text-h3 font-bold font-body">
+              <h2 id="progres" className="text-h3 font-semibold font-body">
                 Progres pemrosesan
               </h2>
               <p className="tabular mt-1" aria-live="polite">
@@ -275,9 +275,9 @@ export function BatchUpload() {
           Unggah foto atau PDF lembar jawaban. File dengan NIM di namanya langsung dipetakan ke mahasiswa.
         </EmptyState>
       ) : shown.length === 0 ? (
-        <p className="rounded-md border border-border bg-surface px-4 py-4">
+        <p className="rounded-lg border border-border bg-surface px-4 py-4">
           Tidak ada file dengan status ini.{" "}
-          <button type="button" onClick={() => setFilter("all")} className="min-h-11 font-semibold text-primary underline underline-offset-4">
+          <button type="button" onClick={() => setFilter("all")} className="min-h-11 font-medium underline decoration-border-strong underline-offset-4 hover:decoration-current">
             Tampilkan semua
           </button>
         </p>
@@ -341,7 +341,7 @@ function RowAction({ sub, examId, onRetry }: { sub: Submission; examId: string; 
     return (
       <Link
         href={`/dosen/ujian/${examId}/review?s=${sub.id}`}
-        className="inline-flex min-h-11 items-center font-semibold text-primary underline-offset-4 hover:underline md:min-h-9"
+        className="inline-flex min-h-11 items-center font-medium underline decoration-border-strong underline-offset-4 hover:decoration-current md:min-h-9"
       >
         Buka review
       </Link>

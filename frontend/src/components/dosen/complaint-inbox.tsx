@@ -70,7 +70,7 @@ export function ComplaintInbox() {
           </EmptyState>
         ) : (
           <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
-            <ul aria-label="Daftar keberatan" className="self-start divide-y divide-border rounded-md border border-border bg-surface">
+            <ul aria-label="Daftar keberatan" className="self-start divide-y divide-border rounded-lg border border-border bg-surface">
               {items.map((c) => {
                 const st = data.students.find((s) => s.id === c.studentId);
                 const exam = data.exams.find((e) => e.id === c.examId);
@@ -182,14 +182,14 @@ function ComplaintDetail({ complaint }: { complaint: Complaint }) {
           <p className="mt-2">{complaint.aiSummary}</p>
           <a
             href="#keberatan-asli"
-            className="mt-2 inline-flex min-h-11 items-center font-semibold text-primary underline underline-offset-4"
+            className="mt-2 inline-flex min-h-11 items-center font-medium underline decoration-border-strong underline-offset-4 hover:decoration-current"
           >
             Lihat keberatan asli
           </a>
         </section>
 
         <div className="space-y-5">
-          <section id="keberatan-asli" aria-labelledby="asli" className="scroll-mt-6 rounded-md border border-border bg-surface p-4">
+          <section id="keberatan-asli" aria-labelledby="asli" className="scroll-mt-6 rounded-lg border border-border bg-surface p-4">
             <h3 id="asli" className="flex items-center gap-2 font-semibold">
               <Icon icon={MessageSquareWarning} className="text-primary" />
               Keberatan asli dari mahasiswa
@@ -206,11 +206,11 @@ function ComplaintDetail({ complaint }: { complaint: Complaint }) {
           </section>
 
           {grade && (
-            <section aria-labelledby="nilai-terkait" className="rounded-md border border-border bg-surface p-4">
+            <section aria-labelledby="nilai-terkait" className="rounded-lg border border-border bg-surface p-4">
               <h3 id="nilai-terkait" className="font-semibold">
                 Nilai dan umpan balik terkait
               </h3>
-              <p className="tabular mt-1 text-score-md font-bold text-primary">{scoreText(current, question.maxScore)}</p>
+              <p className="tabular mt-1 text-score-md font-semibold text-ink">{scoreText(current, question.maxScore)}</p>
               <p className="mt-2">{grade.studentFeedback}</p>
               {page && grade.evidence.length > 0 && (
                 <ul className="mt-3 space-y-2">
@@ -227,7 +227,7 @@ function ComplaintDetail({ complaint }: { complaint: Complaint }) {
               {sub && (
                 <Link
                   href={`/dosen/ujian/${exam.id}/review?s=${sub.id}`}
-                  className="mt-2 inline-flex min-h-11 items-center font-semibold text-primary underline-offset-4 hover:underline"
+                  className="mt-2 inline-flex min-h-11 items-center font-medium underline decoration-border-strong underline-offset-4 hover:decoration-current"
                 >
                   Buka jawaban lengkap di Review
                 </Link>
@@ -252,14 +252,14 @@ function ComplaintDetail({ complaint }: { complaint: Complaint }) {
       </div>
 
       {closed ? (
-        <section className="rounded-md border border-border bg-surface p-4">
+        <section className="rounded-lg border border-border bg-surface p-4">
           <h3 className="font-semibold">Keputusan</h3>
           <p className="mt-1">{complaint.decisionNote}</p>
           {complaint.decidedAt && <p className="mt-1 text-small text-text-muted">Diputuskan {formatDateLong(complaint.decidedAt)}</p>}
         </section>
       ) : (
         <section aria-labelledby="keputusan" className="space-y-4 rounded-md border-2 border-primary bg-surface p-4 sm:p-5">
-          <h3 id="keputusan" className="text-h3 font-bold">
+          <h3 id="keputusan" className="text-h3 font-semibold">
             Keputusan Anda
           </h3>
           {complaint.decisionNote && (

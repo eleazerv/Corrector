@@ -1,10 +1,6 @@
-import { Suspense } from "react";
-import { ComplaintInbox } from "@/components/dosen/complaint-inbox";
+import { ComplaintInbox } from "@/components/teacher/complaints";
 
-export default function Page() {
-  return (
-    <Suspense fallback={<p className="text-text-muted">Memuat keberatan…</p>}>
-      <ComplaintInbox />
-    </Suspense>
-  );
+export default async function Page(props: PageProps<"/dosen/keberatan">) {
+  const { k } = await props.searchParams;
+  return <ComplaintInbox initial={typeof k === "string" ? k : undefined} />;
 }

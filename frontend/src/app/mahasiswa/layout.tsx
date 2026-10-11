@@ -1,5 +1,5 @@
-import { StudentShell } from "@/components/shell/student-shell";
+import { RoleGate } from "@/components/app/role-gate";
 
 export default function MahasiswaLayout({ children }: LayoutProps<"/mahasiswa">) {
-  return <StudentShell>{children}</StudentShell>;
+  return <RoleGate role="student">{children}</RoleGate>;
 }

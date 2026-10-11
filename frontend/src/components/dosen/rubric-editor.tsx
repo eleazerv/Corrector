@@ -135,7 +135,7 @@ export function RubricEditor() {
         </EmptyState>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-          <nav aria-label="Daftar soal" className="self-start rounded-md border border-border bg-surface">
+          <nav aria-label="Daftar soal" className="self-start rounded-lg border border-border bg-surface">
             <ul className="divide-y divide-border">
               {draft.map((x) => {
                 const bad = showErrors && rubricProblems(x).length > 0;

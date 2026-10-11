@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Icon } from "./icon";
 
 export const inputClass =
-  "min-h-11 w-full rounded-md border border-border bg-surface px-3 py-2 text-body text-text placeholder:text-text-muted focus:border-2 focus:border-primary focus:px-[11px] aria-[invalid=true]:border-danger disabled:bg-disabled";
+  "min-h-11 md:min-h-10 w-full rounded-md border border-border bg-surface px-3 py-2 text-body text-text shadow-sm transition-colors duration-[120ms] placeholder:text-text-muted hover:border-border-strong focus:border-ink aria-[invalid=true]:border-danger disabled:bg-disabled";
 
 export const textareaClass = inputClass + " leading-6";
 
@@ -24,9 +24,9 @@ export function Field({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block font-semibold">
+      <label htmlFor={id} className="mb-1.5 block font-medium">
         {label}
-        {required && <span className="ml-1 font-normal text-text-muted">(wajib)</span>}
+        {required && <span className="ml-1 text-small font-normal text-text-muted">wajib</span>}
       </label>
       {children}
       {help && (
@@ -69,7 +69,7 @@ export function Switch({
   return (
     <div className="flex items-start justify-between gap-4 py-3">
       <div>
-        <p id={`${id}-label`} className="font-semibold">
+        <p id={`${id}-label`} className="font-medium">
           {label}
         </p>
         {help && (
@@ -89,17 +89,17 @@ export function Switch({
         className="flex min-h-11 shrink-0 items-center gap-2"
       >
         <span
-          className={`relative h-6 w-11 rounded-sm border-2 transition-colors duration-[120ms] ${
-            checked ? "border-primary bg-primary" : "border-border-strong bg-surface"
+          className={`relative h-6 w-10 rounded-full transition-colors duration-[120ms] ${
+            checked ? "bg-ink" : "bg-border-strong"
           }`}
         >
           <span
-            className={`absolute left-0 top-0.5 h-4 w-4 rounded-[1px] transition-transform duration-[120ms] ${
-              checked ? "translate-x-[22px] bg-white" : "translate-x-0.5 bg-border-strong"
+            className={`absolute left-0 top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-[120ms] ${
+              checked ? "translate-x-5" : "translate-x-1"
             }`}
           />
         </span>
-        <span className="w-12 text-left text-small font-semibold">{checked ? "Aktif" : "Nonaktif"}</span>
+        <span className="w-14 text-left text-small text-text-muted">{checked ? "Aktif" : "Nonaktif"}</span>
       </button>
     </div>
   );

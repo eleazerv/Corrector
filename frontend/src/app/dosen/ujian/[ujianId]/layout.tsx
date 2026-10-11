@@ -1,6 +1,6 @@
-import { ExamFrame } from "@/components/dosen/exam-frame";
+import { ExamFrame } from "@/components/exam/frame";
 
 export default async function ExamLayout(props: LayoutProps<"/dosen/ujian/[ujianId]">) {
   const { ujianId } = await props.params;
-  return <ExamFrame examId={ujianId}>{props.children}</ExamFrame>;
+  return <ExamFrame id={ujianId}>{props.children}</ExamFrame>;
 }

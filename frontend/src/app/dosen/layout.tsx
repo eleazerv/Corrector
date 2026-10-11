@@ -1,5 +1,5 @@
-import { DosenShell } from "@/components/shell/dosen-shell";
+import { RoleGate } from "@/components/app/role-gate";
 
 export default function DosenLayout({ children }: LayoutProps<"/dosen">) {
-  return <DosenShell>{children}</DosenShell>;
+  return <RoleGate role="teacher">{children}</RoleGate>;
 }

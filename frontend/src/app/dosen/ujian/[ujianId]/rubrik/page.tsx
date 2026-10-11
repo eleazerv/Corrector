@@ -1,5 +1,5 @@
-import { RubricEditor } from "@/components/dosen/rubric-editor";
+import { RubricStep } from "@/components/exam/rubric-step";
 
 export default function Page() {
-  return <RubricEditor />;
+  return <RubricStep />;
 }

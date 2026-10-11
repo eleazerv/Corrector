@@ -2,27 +2,28 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CircleCheck, FileText, MessageSquareWarning, Plus, Send, type LucideIcon } from "lucide-react";
+import { CircleCheck, Plus } from "lucide-react";
 import { useData } from "@/lib/store";
-import { Button } from "@/components/ui/button";
+import { stageText } from "@/lib/grading";
+import type { Tone } from "@/lib/grading";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonClass } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Container, PageHeader } from "@/components/ui/page";
 import { ClassTable, CreateClassModal } from "./class-parts";
 
 interface Task {
   href: string;
-  icon: LucideIcon;
+  tone: Tone;
+  status: string;
   title: string;
   detail: string;
+  action: string;
 }
 
 export function Dashboard() {
   const { data } = useData();
   const [creating, setCreating] = useState(false);
-
-  const gradingExams = data.exams.filter((e) => e.stage === "penilaian" || e.stage === "review");
-  const reviewSubs = data.submissions.filter((s) => s.status === "review_required");
-  const newComplaints = data.complaints.filter((c) => c.status === "baru");
 
   const tasks: Task[] = [];
   for (const exam of data.exams) {
@@ -32,40 +33,47 @@ export function Dashboard() {
     const unmapped = subs.filter((s) => !s.studentId).length;
     const failed = subs.filter((s) => s.status === "ocr_failed").length;
     const ready = subs.filter((s) => s.status === "graded").length;
-    const where = `${exam.title}, ${cls?.name ?? ""}`;
+    const where = `${exam.title} • ${cls?.name ?? ""}`;
     if (review)
       tasks.push({
         href: `/dosen/ujian/${exam.id}/review?filter=review`,
-        icon: FileText,
-        title: `${review} jawaban perlu review`,
+        tone: "warning",
+        status: "Perlu Review",
+        title: `${review} jawaban ditandai AI untuk diperiksa`,
         detail: where,
+        action: "Mulai review",
       });
     if (unmapped || failed)
       tasks.push({
         href: `/dosen/ujian/${exam.id}/unggah`,
-        icon: FileText,
-        title: [unmapped && `${unmapped} file belum dipetakan`, failed && `${failed} file OCR gagal`]
-          .filter(Boolean)
-          .join(", "),
+        tone: "danger",
+        status: "File bermasalah",
+        title: [unmapped && `${unmapped} file belum dipetakan`, failed && `${failed} file OCR gagal`].filter(Boolean).join(", "),
         detail: where,
+        action: "Perbaiki file",
       });
     if (ready && !review && exam.stage === "review")
-      tasks.push({ href: `/dosen/ujian/${exam.id}/publikasi`, icon: Send, title: "Siap dipublikasikan", detail: where });
+      tasks.push({
+        href: `/dosen/ujian/${exam.id}/publikasi`,
+        tone: "success",
+        status: "Siap",
+        title: `${ready} nilai siap dipublikasikan`,
+        detail: where,
+        action: "Buka publikasi",
+      });
   }
+  const newComplaints = data.complaints.filter((c) => c.status === "baru");
   if (newComplaints.length)
     tasks.push({
       href: "/dosen/keberatan",
-      icon: MessageSquareWarning,
+      tone: "info",
+      status: "Keberatan",
       title: `${newComplaints.length} keberatan nilai baru`,
-      detail: "Baca keberatan asli dan putuskan tindak lanjutnya.",
+      detail: "Baca keberatan asli sebelum memutuskan",
+      action: "Buka keberatan",
     });
 
-  const counts = [
-    { label: "Kelas aktif", value: data.classes.length, href: "/dosen/kelas" },
-    { label: "Ujian sedang dinilai", value: gradingExams.length, href: gradingExams[0] ? `/dosen/ujian/${gradingExams[0].id}/review` : "/dosen/kelas" },
-    { label: "Jawaban perlu review", value: reviewSubs.length, href: reviewSubs[0] ? `/dosen/ujian/${reviewSubs[0].examId}/review?filter=review` : "/dosen/kelas" },
-    { label: "Keberatan baru", value: newComplaints.length, href: "/dosen/keberatan" },
-  ];
+  const running = data.exams.filter((e) => e.stage === "penilaian" || e.stage === "review");
 
   return (
     <Container>
@@ -79,50 +87,94 @@ export function Dashboard() {
         }
       />
 
-      <ul aria-label="Ringkasan" className="grid grid-cols-2 border-y border-border bg-surface md:grid-cols-4">
-        {counts.map((c, i) => (
-          <li
-            key={c.label}
-            className={`border-border ${i % 2 ? "border-l" : ""} ${i >= 2 ? "border-t md:border-t-0" : ""} ${i > 0 ? "md:border-l" : ""}`}
-          >
-            <Link href={c.href} className="block min-h-11 px-4 py-3 hover:bg-primary-soft">
-              <span className="block text-small text-text-muted">{c.label}</span>
-              <span className="tabular block text-score-md font-bold">{c.value}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <section aria-labelledby="tugas" className="min-w-0">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 id="tugas" className="text-h2">
+              Perlu tindakan Anda
+            </h2>
+            <span className="tabular text-small text-text-muted">{tasks.length} item</span>
+          </div>
+          {tasks.length === 0 ? (
+            <p className="flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-5">
+              <Icon icon={CircleCheck} className="text-success" />
+              Tidak ada yang menunggu. Jawaban baru dan keberatan akan muncul di sini.
+            </p>
+          ) : (
+            <ol className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+              {tasks.map((t) => (
+                <li key={t.href + t.title} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center">
+                  <div className="min-w-0 flex-1">
+                    <Badge tone={t.tone}>{t.status}</Badge>
+                    <p className="mt-1.5 font-medium">{t.title}</p>
+                    <p className="text-small text-text-muted">{t.detail}</p>
+                  </div>
+                  <Link href={t.href} className={buttonClass("secondary", true, "shrink-0")}>
+                    {t.action}
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
 
-      <section aria-labelledby="tugas" className="mt-10">
-        <h2 id="tugas" className="text-h2">
-          Perlu tindakan Anda
-        </h2>
-        {tasks.length === 0 ? (
-          <p className="mt-3 flex items-center gap-2 rounded-md border border-border bg-surface px-4 py-4">
-            <Icon icon={CircleCheck} className="text-success" />
-            Tidak ada yang menunggu. Jawaban baru dan keberatan akan muncul di sini.
-          </p>
-        ) : (
-          <ol className="mt-3 divide-y divide-border rounded-md border border-border bg-surface">
-            {tasks.map((t) => (
-              <li key={t.href + t.title}>
-                <Link href={t.href} className="flex min-h-11 items-start gap-3 px-4 py-4 hover:bg-primary-soft">
-                  <Icon icon={t.icon} className="mt-0.5 shrink-0 text-primary" />
-                  <span>
-                    <span className="block font-semibold text-primary underline-offset-4">{t.title}</span>
-                    <span className="text-small text-text-muted">{t.detail}</span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
+        <aside aria-labelledby="berjalan">
+          <h2 id="berjalan" className="mb-3 text-h2">
+            Penilaian berjalan
+          </h2>
+          {running.length === 0 ? (
+            <p className="text-text-muted">Belum ada ujian yang sedang dinilai.</p>
+          ) : (
+            <ul className="space-y-3">
+              {running.map((e) => {
+                const subs = data.submissions.filter((s) => s.examId === e.id && s.studentId);
+                const done = subs.filter((s) => s.status === "graded" || s.status === "published").length;
+                const pct = subs.length ? Math.round((done / subs.length) * 100) : 0;
+                const cls = data.classes.find((c) => c.id === e.classId);
+                return (
+                  <li key={e.id}>
+                    <Link
+                      href={`/dosen/ujian/${e.id}/review`}
+                      className="block rounded-lg border border-border bg-surface p-4 hover:border-border-strong"
+                    >
+                      <span className="block font-medium">{e.title}</span>
+                      <span className="block text-small text-text-muted">
+                        {cls?.name} • {stageText(e.stage)}
+                      </span>
+                      <span
+                        className="mt-3 block h-1.5 overflow-hidden rounded-full bg-disabled"
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={pct}
+                        aria-label={`Progres review ${e.title}`}
+                      >
+                        <span className="block h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                      </span>
+                      <span className="tabular mt-1.5 block text-small text-text-muted">
+                        {done} dari {subs.length} jawaban selesai direview
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </aside>
+      </div>
 
       <section aria-labelledby="kelas" className="mt-12">
-        <h2 id="kelas" className="mb-3 text-h2">
-          Kelas Anda
-        </h2>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 id="kelas" className="text-h2">
+            Kelas Anda
+          </h2>
+          <Link
+            href="/dosen/kelas"
+            className="inline-flex min-h-11 items-center text-small text-text-muted underline decoration-border-strong underline-offset-4 hover:text-text md:min-h-0"
+          >
+            Semua kelas
+          </Link>
+        </div>
         <ClassTable onCreate={() => setCreating(true)} />
       </section>
 

@@ -1,226 +1,153 @@
 @import "tailwindcss";
 
-/* Tokens from design.md §12. Tailwind reads them as utilities (bg-primary, text-h2, rounded-md...). */
+/*
+ * Clean and quiet: neutral greys and white work surfaces, so the student's answer and the
+ * numbers carry the page.
+ * - One accent: red ink marks a score the lecturer has decided (the final score). Nothing else is red.
+ * - AI suggestions are plain grey text, labelled "AI" where the context does not already say so,
+ *   so the difference never rests on colour alone.
+ * - Amber marks a state that needs a person to act.
+ */
 @theme {
-  --color-primary: #1f3a5f;
-  --color-primary-hover: #16304f;
-  --color-primary-soft: #e8eef5;
-  --color-accent: #7a1f2b;
-  --color-accent-hover: #641923;
-  --color-accent-soft: #f6e9eb;
-
-  --color-bg: #f7f6f2;
+  --color-paper: #f5f5f4;
   --color-surface: #ffffff;
-  --color-zebra: #fbfaf7;
-  --color-border: #cfcbc2;
-  --color-border-strong: #8c877c;
-  --color-text: #1a1a1a;
-  --color-text-muted: #555249;
-  --color-disabled: #e4e1da;
+  --color-sunken: #efeeec;
+  --color-rule: #e2e1de;
+  /* 3.5:1 on surface: input and control borders only, never text */
+  --color-rule-strong: #8a8883;
+  --color-ink: #1c1b19;
+  --color-pencil: #5c5a55;
+  --color-pen: #b3261e;
+  --color-attention: #7a4b00;
+  --color-attention-soft: #fbf0d9;
+  /* Marks the evidence of the criterion the lecturer is looking at, nothing else. */
+  --color-highlight: #fcefb4;
 
-  --color-success: #1e6b3a;
-  --color-success-soft: #e6f2ea;
-  --color-warning: #8a5a00;
-  --color-warning-soft: #fcf3dc;
-  --color-danger: #a61b1b;
-  --color-danger-soft: #fbe9e9;
-  --color-info: #1d5c8c;
-  --color-info-soft: #e6f0f8;
-  --color-highlight: #fff4c2;
-
-  --text-display: 32px;
-  --text-display--line-height: 40px;
-  --text-h1: 28px;
-  --text-h1--line-height: 36px;
-  --text-h2: 22px;
-  --text-h2--line-height: 30px;
-  --text-h3: 18px;
-  --text-h3--line-height: 26px;
-  --text-body: 16px;
-  --text-body--line-height: 24px;
-  --text-small: 14px;
-  --text-small--line-height: 20px;
-  --text-score-lg: 40px;
-  --text-score-lg--line-height: 48px;
-  --text-score-md: 24px;
-  --text-score-md--line-height: 32px;
-
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
 }
 
 @theme inline {
-  --font-heading: var(--font-source-serif), Georgia, "Times New Roman", serif;
-  --font-body: var(--font-source-sans), "Segoe UI", Roboto, Arial, sans-serif;
-  --font-mono: var(--font-source-code), Consolas, "Courier New", monospace;
+  /* Plus Jakarta Sans: chosen by the product owner; an Indonesian typeface for an Indonesian-language tool. */
+  --font-sans: var(--font-jakarta), "Segoe UI", Roboto, Arial, sans-serif;
+  /* Roboto Mono only for ids and pasted NIM lists, where every character must line up. */
+  --font-mono: var(--font-roboto-mono), Consolas, "Courier New", monospace;
 }
 
-html {
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-family: var(--font-body);
-  font-size: 16px;
-  line-height: 24px;
-  -webkit-text-size-adjust: 100%;
-}
-
-body {
-  background: var(--color-bg);
-  min-height: 100dvh;
-}
-
-:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-h1,
-h2 {
-  font-family: var(--font-heading);
-  font-weight: 600;
-}
-
-.tabular {
-  font-variant-numeric: tabular-nums;
-}
-
-/* Identity motif: the double rule under page headers, as on an official transcript. */
-.doc-rule {
-  border-bottom: 3px double var(--color-primary);
-}
-
-/* Short uppercase labels only (INTERNAL, DRAFT), per design.md §3.2. */
-.label-caps {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 700;
-}
-
-/* Grade-sheet table. Below 640px each row turns into a label/value card (design.md §7.5). */
-.sheet {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--color-surface);
-}
-.sheet th {
-  background: var(--color-primary-soft);
-  font-weight: 600;
-  text-align: left;
-  border-bottom: 2px solid var(--color-border-strong);
-  padding: 12px 16px;
-  vertical-align: bottom;
-}
-.sheet td {
-  border-bottom: 1px solid var(--color-border);
-  padding: 12px 16px;
-  height: 52px;
-  vertical-align: middle;
-}
-.sheet tbody tr:nth-child(even) td {
-  background: var(--color-zebra);
-}
-.sheet .num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 639px) {
-  .sheet thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
+/* Layered so that utility classes can still override these defaults. */
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-text-size-adjust: 100%;
   }
-  .sheet,
-  .sheet tbody,
-  .sheet tr,
-  .sheet td {
-    display: block;
+
+  body {
+    background: var(--color-paper);
+    min-height: 100dvh;
   }
-  .sheet {
-    background: transparent;
+
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
   }
-  .sheet tr {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    margin-bottom: 12px;
-    padding: 4px 0;
+
+  h1,
+  h2,
+  h3 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
   }
-  .sheet td,
-  .sheet tbody tr:nth-child(even) td {
-    background: transparent;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    height: auto;
-    min-height: 44px;
-    border-bottom: 1px solid var(--color-disabled);
-    text-align: right;
-    padding: 8px 16px;
+
+  dialog::backdrop {
+    background: rgb(28 27 25 / 0.45);
   }
-  .sheet td:last-child {
+}
+
+@layer components {
+  .num {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* The passage that backs the criterion the lecturer selected. */
+  .ev-on {
+    background: var(--color-highlight);
+    border-radius: 2px;
+    padding: 1px 2px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  /* Data tables: rows become label/value cards below 640px. */
+  .table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .table th {
+    color: var(--color-pencil);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    border-bottom: 1px solid var(--color-rule);
+    padding: 8px 12px;
+    white-space: nowrap;
+  }
+  .table td {
+    border-bottom: 1px solid var(--color-rule);
+    padding: 10px 12px;
+    vertical-align: middle;
+  }
+  .table tbody tr:last-child td {
     border-bottom: 0;
   }
-  .sheet td[data-label]::before {
-    content: attr(data-label);
-    font-weight: 600;
-    color: var(--color-text-muted);
-    text-align: left;
-    flex-shrink: 0;
-  }
-  .sheet .num {
+  .table .right {
     text-align: right;
   }
-}
 
-dialog::backdrop {
-  background: rgba(26, 26, 26, 0.45);
-}
-
-dialog[open] {
-  animation: dialog-in 200ms ease-out;
-}
-
-@keyframes dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.flash {
-  animation: flash 1.2s ease-out;
-}
-
-@keyframes flash {
-  from {
-    outline: 3px solid var(--color-primary);
-    outline-offset: 2px;
-  }
-  to {
-    outline: 3px solid transparent;
-    outline-offset: 2px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  @media (max-width: 639px) {
+    .table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+    .table,
+    .table tbody,
+    .table tr,
+    .table td {
+      display: block;
+    }
+    .table tr {
+      border-bottom: 1px solid var(--color-rule);
+      padding: 6px 0;
+    }
+    .table tbody tr:last-child {
+      border-bottom: 0;
+    }
+    .table td,
+    .table .right {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 0;
+      padding: 4px 0;
+      min-height: 36px;
+      text-align: right;
+    }
+    .table td[data-label]::before {
+      content: attr(data-label);
+      font-size: 13px;
+      color: var(--color-pencil);
+      text-align: left;
+      flex-shrink: 0;
+    }
   }
 }

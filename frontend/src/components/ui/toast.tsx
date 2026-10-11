@@ -42,14 +42,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col gap-2 sm:inset-x-auto sm:top-20 sm:right-6 sm:bottom-auto sm:w-96"
+        className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col gap-2 sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-96"
       >
         {toasts.map((t) => {
           const s = STYLE[t.tone];
           return (
             <div
               key={t.id}
-              className="pointer-events-auto flex items-start gap-3 rounded-md border border-border bg-surface px-4 py-3 shadow-md"
+              className="pointer-events-auto flex items-start gap-3 rounded-lg border border-border bg-surface px-4 py-3 shadow-md"
             >
               <Icon icon={s.icon} className={`mt-0.5 shrink-0 ${s.cls}`} />
               <div className="flex-1">
@@ -61,7 +61,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                       dismiss(t.id);
                       t.action!.onClick();
                     }}
-                    className="mt-1 min-h-11 font-semibold text-primary underline underline-offset-4"
+                    className="mt-1 min-h-11 font-medium text-ink underline underline-offset-4"
                   >
                     {t.action.label}
                   </button>

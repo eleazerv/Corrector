@@ -1,10 +1,6 @@
-import { Suspense } from "react";
-import { ReviewWorkspace } from "@/components/dosen/review-workspace";
+import { ReviewStep } from "@/components/exam/review-step";
 
-export default function Page() {
-  return (
-    <Suspense fallback={<p className="text-text-muted">Memuat jawaban…</p>}>
-      <ReviewWorkspace />
-    </Suspense>
-  );
+export default async function Page(props: PageProps<"/dosen/ujian/[ujianId]/review">) {
+  const { lembar } = await props.searchParams;
+  return <ReviewStep initialSheet={typeof lembar === "string" ? lembar : undefined} />;
 }

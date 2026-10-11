@@ -58,7 +58,7 @@ export function Modal({
           </div>
           <div className="px-5 py-5 sm:px-6">{children}</div>
           {footer && (
-            <div className="flex flex-col-reverse gap-3 border-t border-border px-5 py-4 sm:flex-row sm:justify-between sm:px-6">
+            <div className="flex flex-col-reverse gap-3 border-t border-border px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
               {footer}
             </div>
           )}
@@ -120,13 +120,13 @@ export function ConfirmModal({
     >
       <div className="space-y-3">{children}</div>
       {requireCheck && (
-        <label htmlFor={checkId} className="mt-5 flex min-h-11 cursor-pointer items-center gap-3 font-semibold">
+        <label htmlFor={checkId} className="mt-5 flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border bg-zebra px-3 font-medium">
           <input
             id={checkId}
             type="checkbox"
             checked={checked}
             onChange={(e) => setChecked(e.target.checked)}
-            className="h-5 w-5 accent-primary"
+            className="h-4 w-4 accent-ink"
           />
           {requireCheck}
         </label>

@@ -41,7 +41,7 @@ export function StudentGrade({ examId }: { examId: string }) {
   return (
     <div>
       <nav aria-label="Breadcrumb" className="mb-4 text-small">
-        <Link href="/mahasiswa" className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline">
+        <Link href="/mahasiswa" className="inline-flex min-h-11 items-center text-primary underline decoration-border-strong underline-offset-4 hover:decoration-current">
           Nilai Saya
         </Link>
         <span className="mx-2 text-text-muted">/</span>
@@ -61,7 +61,7 @@ export function StudentGrade({ examId }: { examId: string }) {
                     <li key={c.id} className="flex flex-wrap items-center gap-2">
                       <span>Soal {exam.questions.find((q) => q.id === c.questionId)?.number}</span>
                       <ComplaintBadge status={c.status} />
-                      <Link href="/mahasiswa/keberatan" className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline">
+                      <Link href="/mahasiswa/keberatan" className="inline-flex min-h-11 items-center text-primary underline decoration-border-strong underline-offset-4 hover:decoration-current">
                         Lihat detail
                       </Link>
                     </li>
