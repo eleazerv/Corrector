@@ -2,7 +2,10 @@ import secrets
 import string
 from uuid import UUID
 
+from supabase_auth.errors import AuthApiError  
+
 from core.errors import AppError
+from core.logging import log 
 
 from .schemas import (
     CreateStudentBulkRequest,
@@ -41,6 +44,45 @@ def generate_temp_password(length: int = 16) -> str:
     return "".join(password)
 
 
+async def _create_auth_user(sb, attributes: dict):
+    """Buat akun login. Email sudah terdaftar / tidak valid -> 409 (sebelumnya jadi 500)."""
+    try:
+        return await sb.auth.admin.create_user(attributes)
+    except AuthApiError as e:
+        raise AppError("AUTH_USER_FAILED", f"Cannot create login account: {e}", 409)
+
+
+async def _update_auth_email(sb, user_id, email: str):
+    """Samakan email login dengan email di tabel."""
+    try:
+        await sb.auth.admin.update_user_by_id(str(user_id), {"email": email, "email_confirm": True})
+    except AuthApiError as e:
+        raise AppError("AUTH_USER_FAILED", f"Cannot change login email: {e}", 409)
+
+
+async def _fetchrow_or_revert_email(db, sb, current, new_email: str, sql: str, *args):
+    """Jalankan UPDATE; kalau gagal (mis. email kembar), kembalikan email login ke yang lama."""
+    try:
+        return await db.fetchrow(sql, *args)
+    except Exception:
+        if current["user_id"] is not None and new_email != current["email"]:
+            try:
+                await _update_auth_email(sb, current["user_id"], current["email"])
+            except Exception as e:
+                log.warning("school: gagal mengembalikan email auth %s: %s", current["user_id"], e)
+        raise
+
+
+async def _delete_auth_user(sb, user_id):
+    """Hapus akun login. Gagal -> hanya dicatat (baris di tabel sudah terhapus)."""
+    if user_id is None:
+        return
+    try:
+        await sb.auth.admin.delete_user(str(user_id))
+    except Exception as e:
+        log.warning("school: gagal menghapus akun auth %s: %s", user_id, e)
+
+
 async def create_teacher(
     db,
     sb,
@@ -49,7 +91,8 @@ async def create_teacher(
 ):
     temp_password = generate_temp_password()
 
-    auth_response = await sb.auth.admin.create_user(
+    auth_response = await _create_auth_user( 
+        sb,
         {
             "email": req.email,
             "password": temp_password,
@@ -113,7 +156,8 @@ async def create_student(
 ):
     temp_password = generate_temp_password()
 
-    auth_response = await sb.auth.admin.create_user(
+    auth_response = await _create_auth_user( 
+        sb,
         {
             "email": req.email,
             "password": temp_password,
@@ -256,11 +300,23 @@ async def get_students(
 
 async def update_teacher(
     db,
+    sb,  
     teacher_id: UUID,
     school_id: UUID,
     req: UpdateTeacherRequest,
 ):
-    row = await db.fetchrow(
+    current = await db.fetchrow(
+        "SELECT user_id, email FROM teachers WHERE id = $1 AND school_id = $2",
+        teacher_id,
+        school_id,
+    )
+    if current is None:
+        return None
+    if current["user_id"] is not None and req.email != current["email"]:
+        await _update_auth_email(sb, current["user_id"], req.email)
+
+    row = await _fetchrow_or_revert_email(  
+        db, sb, current, req.email,
         """
         UPDATE teachers
         SET
@@ -321,6 +377,9 @@ async def create_students_bulk(
         )
 
         if existing is not None:
+            if existing["user_id"] is not None and student_req.email != existing["email"]:
+                await _update_auth_email(sb, existing["user_id"], student_req.email)
+
             row = await db.fetchrow(
                 """
                 UPDATE students
@@ -372,11 +431,23 @@ async def create_students_bulk(
 
 async def update_student(
     db,
+    sb, 
     student_id: UUID,
     school_id: UUID,
     req: UpdateStudentRequest,
 ):
-    row = await db.fetchrow(
+    current = await db.fetchrow(
+        "SELECT user_id, email FROM students WHERE id = $1 AND school_id = $2",
+        student_id,
+        school_id,
+    )
+    if current is None:
+        return None
+    if current["user_id"] is not None and req.email != current["email"]:
+        await _update_auth_email(sb, current["user_id"], req.email)
+
+    row = await _fetchrow_or_revert_email( 
+        db, sb, current, req.email,
         """
         UPDATE students
         SET
@@ -408,12 +479,13 @@ async def update_student(
 
 async def delete_student(
     db,
+    sb, 
     student_id: UUID,
     school_id: UUID,
 ):
     student = await db.fetchrow(
         """
-        SELECT id
+        SELECT id, user_id
         FROM students
         WHERE id = $1
           AND school_id = $2
@@ -453,17 +525,20 @@ async def delete_student(
         school_id,
     )
 
+    await _delete_auth_user(sb, student["user_id"])
+
     return True
 
 
 async def delete_teacher(
     db,
+    sb,  
     teacher_id: UUID,
     school_id: UUID,
 ):
     teacher = await db.fetchrow(
         """
-        SELECT id
+        SELECT id, user_id
         FROM teachers
         WHERE id = $1
           AND school_id = $2
@@ -520,6 +595,8 @@ async def delete_teacher(
         teacher_id,
         school_id,
     )
+
+    await _delete_auth_user(sb, teacher["user_id"])
 
     return True
 

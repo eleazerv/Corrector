@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field  
 
 
 class CreateTeacherRequest(BaseModel):
@@ -63,7 +63,7 @@ class StudentListResponse(BaseModel):
 
 
 class CreateStudentBulkRequest(BaseModel):
-    students: list[CreateStudentRequest]
+    students: list[CreateStudentRequest] = Field(min_length=1, max_length=200)
 
 
 class StudentBulkCreatedResponse(BaseModel):

@@ -18,6 +18,8 @@ from .schemas import (
 
 )
 
+CLASS_TEST_STATUSES = ("scheduled", "uploading", "processing", "reviewing", "published")
+
 
 # ============================================================
 # HELPER
@@ -113,6 +115,29 @@ async def validate_test_owner(
         )
 
     return row
+
+
+
+async def ensure_no_answer_sheets(db, test_id: UUID):
+    has_sheets = await db.fetchval(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM student_tests st
+            JOIN class_tests ct
+              ON ct.id = st.class_test_id
+            WHERE ct.test_id = $1
+        )
+        """,
+        test_id,
+    )
+
+    if has_sheets:
+        raise AppError(
+            "TEST_HAS_ANSWER_SHEETS",
+            "Questions cannot be changed because answer sheets already exist for this test",
+            409,
+        )
 
 
 # ============================================================
@@ -544,6 +569,8 @@ async def add_question(
     if test is None:
         return None
 
+    await ensure_no_answer_sheets(db, test_id) 
+
     if req.number <= 0:
         raise AppError(
             "INVALID_QUESTION_NUMBER",
@@ -693,6 +720,8 @@ async def update_question(
     if question is None:
         return None
 
+    await ensure_no_answer_sheets(db, test_id)  
+
     if req.number <= 0 or req.max_points <= 0:
         raise AppError(
             "INVALID_QUESTION",
@@ -820,6 +849,8 @@ async def delete_question(
     if row is None:
         return False
 
+    await ensure_no_answer_sheets(db, row["test_id"])  
+
     await db.execute(
         """
         DELETE FROM test_questions
@@ -846,6 +877,7 @@ async def replace_criteria(
         """
         SELECT
             q.id,
+            q.test_id,
             q.max_points
         FROM test_questions q
         JOIN tests t
@@ -863,6 +895,8 @@ async def replace_criteria(
 
     if question is None:
         return None
+
+    await ensure_no_answer_sheets(db, question["test_id"])
 
     if any(item.points <= 0 for item in criteria):
         raise AppError(
@@ -1284,9 +1318,27 @@ async def update_class_test(
             403,
         )
 
-    corrector_id = req.corrector_id
 
-    if corrector_id is not None:
+    if "corrector_id" in req.model_fields_set:
+        corrector_id = req.corrector_id
+    else:
+        corrector_id = current["corrector_id"]
+
+    if req.status is not None and req.status != current["status"]:
+        if req.status not in CLASS_TEST_STATUSES:
+            raise AppError(
+                "INVALID_STATUS",
+                f"status must be one of: {', '.join(CLASS_TEST_STATUSES)}",
+                422,
+            )
+        if req.status == "published":
+            raise AppError(
+                "USE_PUBLISH_ENDPOINT",
+                "Use the publish endpoint to release grades",
+                409,
+            )
+
+    if corrector_id is not None and corrector_id != current["corrector_id"]:
         corrector_exists = await db.fetchval(
             """
             SELECT EXISTS (

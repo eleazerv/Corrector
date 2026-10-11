@@ -1,3 +1,4 @@
+import asyncpg  
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -36,6 +37,12 @@ def register_error_handlers(app:FastAPI):
         return JSONResponse(status_code=422,
                             content=_body("VALIDATION_ERROR", "Input is not Valid ", exc.errors()))
         
+    @app.exception_handler(asyncpg.UniqueViolationError)
+    async def handle_unique_violation(request: Request, exc: asyncpg.UniqueViolationError):
+        return JSONResponse(status_code=409,
+                            content=_body("CONFLICT", "Data already exists",
+                                          {"constraint": exc.constraint_name}))
+
     @app.exception_handler(Exception)
     async def handle_unexpected(request: Request, exc: Exception):
         rid = getattr(request.state, "request_id", None)

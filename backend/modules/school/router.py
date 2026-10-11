@@ -9,6 +9,7 @@ from core.deps import (
     get_supabase,
 )
 from core.errors import not_found
+from core.ratelimit import rate_limit 
 
 from . import service
 from .schemas import (
@@ -42,6 +43,7 @@ router = APIRouter(
     "/teachers",
     response_model=TeacherCreatedResponse,
     status_code=201,
+    dependencies=[Depends(rate_limit("school_create", 30))],  
 )
 async def create_teacher(
     req: CreateTeacherRequest,
@@ -90,9 +92,11 @@ async def update_teacher(
     req: UpdateTeacherRequest,
     admin: CurrentUser = AdminUser,
     db=Depends(get_db),
+    sb=Depends(get_supabase),
 ):
     teacher = await service.update_teacher(
         db,
+        sb,
         id,
         admin.school_id,
         req,
@@ -114,9 +118,11 @@ async def delete_teacher(
     id: UUID,
     admin: CurrentUser = AdminUser,
     db=Depends(get_db),
+    sb=Depends(get_supabase), 
 ):
     deleted = await service.delete_teacher(
         db,
+        sb,
         id,
         admin.school_id,
     )
@@ -133,6 +139,7 @@ async def delete_teacher(
     "/students",
     response_model=StudentCreatedResponse,
     status_code=201,
+    dependencies=[Depends(rate_limit("school_create", 30))], 
 )
 async def create_student(
     req: CreateStudentRequest,
@@ -182,6 +189,7 @@ async def get_students(
     "/students/bulk",
     response_model=StudentBulkCreatedResponse,
     status_code=201,
+    dependencies=[Depends(rate_limit("school_bulk", 5))],  
 )
 async def create_students_bulk(
     req: CreateStudentBulkRequest,
@@ -211,9 +219,11 @@ async def update_student(
     req: UpdateStudentRequest,
     admin: CurrentUser = AdminUser,
     db=Depends(get_db),
+    sb=Depends(get_supabase), 
 ):
     student = await service.update_student(
         db,
+        sb,
         id,
         admin.school_id,
         req,
@@ -235,9 +245,11 @@ async def delete_student(
     id: UUID,
     admin: CurrentUser = AdminUser,
     db=Depends(get_db),
+    sb=Depends(get_supabase),  
 ):
     deleted = await service.delete_student(
         db,
+        sb,
         id,
         admin.school_id,
     )
