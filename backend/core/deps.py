@@ -47,6 +47,9 @@ order by prio
 limit 1
 """
 
+async def get_db(request: Request):
+    async with request.app.state.db.acquire() as conn:
+        yield conn
 
 async def get_current_user(
     request: Request,

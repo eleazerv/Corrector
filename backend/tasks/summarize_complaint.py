@@ -18,6 +18,7 @@ from providers.llm.base import PermanentLlmError , TransientLlmError
 import asyncpg
 from arq import Retry
 
+from core.llm_usage import record_usage 
 from core.logging import log
 
 MAX_TRIES = 3
@@ -36,6 +37,7 @@ class ComplaintContext:
     ai_summary: str | None
     student_test_id: UUID
     class_test_id: UUID
+    teacher_id: UUID | None     
     test_answer_id: UUID | None
     question_id: UUID | None
     question_text: str | None
@@ -58,10 +60,13 @@ class ComplaintSummary:
 LOAD_COMPLAINT_SQL = """
 select c.id, c.status, c.complaint, c.ai_summary,
        c.student_test_id, st.class_test_id, c.test_answer_id,
+       coalesce(ct.corrector_id, cl.teacher_id) as teacher_id,
        ta.question_id, q.question_text, q.key_answer, ta.answer_text,
        ta.grade, q.max_points, ta.criteria_result, ta.grading_internal
 from student_complaints c
 join student_tests st on st.id = c.student_test_id
+join class_tests ct on ct.id = st.class_test_id
+join classes cl on cl.id = ct.class_id
 left join test_answers ta on ta.id = c.test_answer_id
 left join test_questions q on q.id = ta.question_id
 where c.id = $1
@@ -123,8 +128,15 @@ async def _process(ctx: dict, complaint_id: UUID) -> dict:
     if c.ai_summary:
         return {"complaint_id": str(complaint_id), "skipped": "already_summarized"}
 
-    async with ctx["llm_semaphore"]:
-        summary = await _call_llm(llm, _build_messages(c))
+
+    used: list = []
+    try:
+        async with ctx["llm_semaphore"]:
+            summary = await _call_llm(llm, _build_messages(c), used)
+    finally:
+        for res in used:
+            await record_usage(pool, job="summarize_complaint", teacher_id=c.teacher_id,
+                               ref_id=complaint_id, res=res)
 
     saved = await _save_summary(pool, complaint_id, summary)
     if saved:
@@ -155,7 +167,7 @@ async def _load_context(pool: asyncpg.Pool, complaint_id: UUID) -> ComplaintCont
     return ComplaintContext(
         **{k: row[k] for k in (
             "id", "status", "complaint", "ai_summary", "student_test_id",
-            "class_test_id", "test_answer_id", "question_id", "question_text",
+            "class_test_id", "teacher_id", "test_answer_id", "question_id", "question_text",
             "key_answer", "answer_text", "criteria_result", "grading_internal",
         )},
         grade=float(row["grade"]) if row["grade"] is not None else None,
@@ -204,9 +216,10 @@ def _build_messages(c: ComplaintContext) -> list[dict]:
     ]
 
 
-async def _call_llm(llm, messages: list[dict]) -> ComplaintSummary:
-    # kontrak provider (dibuat di providers/llm): complete_json(messages) -> dict
-    data = (await llm.complete_json(messages)).data
+async def _call_llm(llm, messages: list[dict], used: list) -> ComplaintSummary:
+    res = await llm.complete_json(messages) 
+    used.append(res)
+    data = res.data
 
     summary = str(data.get("summary", "")).strip()
     rec = str(data.get("recommendation", "")).strip().lower()

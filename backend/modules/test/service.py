@@ -13,6 +13,9 @@ from .schemas import (
     UpdateClassTestRequest,
     UpdateQuestionRequest,
     UpdateTestRequest,
+    ClassTestResponse,
+    ClassTestDetailResponse,
+
 )
 
 

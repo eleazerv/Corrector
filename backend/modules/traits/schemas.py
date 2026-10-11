@@ -27,3 +27,7 @@ class TraitIn(BaseModel):
 class TraitPatch(BaseModel):
     canonical_text: str | None = Field(default=None, min_length=10, max_length=1000)
     is_active: bool | None = None
+
+
+class ConflictResolve(BaseModel): 
+    action: Literal["keep_old", "replace", "keep_both"]

@@ -4,6 +4,8 @@ GET   /traits                    daftar trait sendiri (filter subject_id)
 POST  /traits                    tulis trait sendiri
 PATCH /traits/{id}               edit kalimat / nonaktifkan (makna tidak boleh berbalik)
 GET   /traits/{id}/evidences     override yang menjadi bukti trait ini
+GET   /traits/conflicts          konflik trait milik sendiri (filter status)
+POST  /traits/conflicts/{id}/resolve   pilih keep_old / replace / keep_both
 """
 from uuid import UUID
 
@@ -17,7 +19,7 @@ from core.logging import log
 from providers.llm import get_llm_provider
 
 from . import service
-from .schemas import TraitIn, TraitPatch
+from .schemas import ConflictResolve, TraitIn, TraitPatch  
 
 router = APIRouter(tags=["traits"])
 
@@ -84,3 +86,22 @@ async def getEvidences (
     db: asyncpg.Pool = Depends(get_pool),
 ):
     return await service.trait_evidences(db, user.profile_id, trait_id)
+
+
+@router.get("/traits/conflicts")  
+async def getConflicts (
+    status: str | None = Query(None, pattern="^(pending|keep_old|replace|keep_both)$"),
+    user: CurrentUser = TeacherUser,
+    db: asyncpg.Pool = Depends(get_pool),
+):
+    return await service.list_conflicts(db, user.profile_id, status)
+
+
+@router.post("/traits/conflicts/{conflict_id}/resolve") 
+async def resolveConflict (
+    conflict_id: UUID,
+    body: ConflictResolve,
+    user: CurrentUser = TeacherUser,
+    db: asyncpg.Pool = Depends(get_pool),
+):
+    return await service.resolve_conflict(db, user.profile_id, conflict_id, body.action)

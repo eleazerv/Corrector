@@ -11,6 +11,7 @@ from uuid import UUID
 import asyncpg
 from arq import Retry
 
+from core.llm_usage import record_usage 
 from core.logging import log
 from providers.embedding.base import PermanentEmbeddingError, TransientEmbeddingError, to_pgvector
 from providers.llm.base import PermanentLlmError, TransientLlmError
@@ -208,37 +209,44 @@ async def _process(ctx: dict, override_id: UUID) -> dict:
 
     context = await _load_answer_context(pool, override.test_answer_id)
 
-    async with ctx["llm_semaphore"]:
-        draft = await _generate_trait(llm, override, context)
 
-    if draft is None:
-        await pool.execute(MARK_OVERRIDE_PROCESSED_SQL, override_id)
-        log.info("build_trait: not generalizable, skip %s", override_id)
-        return {"override_id": str(override_id), "skipped": "not_generalizable"}
+    used: list = []        
+    try:
+        async with ctx["llm_semaphore"]:
+            draft = await _generate_trait(llm, override, context, used)
 
-    embedding = await _embed(embedder, draft)
-    similar = await _find_similar(pool, override, embedding)
+        if draft is None:
+            await pool.execute(MARK_OVERRIDE_PROCESSED_SQL, override_id)
+            log.info("build_trait: not generalizable, skip %s", override_id)
+            return {"override_id": str(override_id), "skipped": "not_generalizable"}
 
-    async with ctx["llm_semaphore"]:
-        decision = await _decide(llm, draft, similar)
+        embedding = await _embed(embedder, draft)
+        similar = await _find_similar(pool, override, embedding)
+
+        async with ctx["llm_semaphore"]:
+            decision = await _decide(llm, draft, similar, used)
 
 
 
-    saved = await _save(pool, override, draft, embedding, decision, embedder.model)
-    if saved is None:
-        log.info("build_trait: already processed by another job, skip %s", override_id)
-        return {"override_id": str(override_id), "skipped": "already_processed"}
+        saved = await _save(pool, override, draft, embedding, decision, embedder.model)
+        if saved is None:
+            log.info("build_trait: already processed by another job, skip %s", override_id)
+            return {"override_id": str(override_id), "skipped": "already_processed"}
 
-    log.info("build_trait: %s %s %s %s conflict=%s", override_id, saved.action, saved.relation,
-             saved.trait_id, saved.conflict_id)
-    result = {
-        "override_id": str(override_id), "ok": True,
-        "action": saved.action, "relation": saved.relation, "trait_id": str(saved.trait_id),
-    }
-    if saved.conflict_id is not None:
-        result["conflict_id"] = str(saved.conflict_id)
-        result["new_trait_id"] = str(saved.new_trait_id)
-    return result
+        log.info("build_trait: %s %s %s %s conflict=%s", override_id, saved.action, saved.relation,
+                 saved.trait_id, saved.conflict_id)
+        result = {
+            "override_id": str(override_id), "ok": True,
+            "action": saved.action, "relation": saved.relation, "trait_id": str(saved.trait_id),
+        }
+        if saved.conflict_id is not None:
+            result["conflict_id"] = str(saved.conflict_id)
+            result["new_trait_id"] = str(saved.new_trait_id)
+        return result
+    finally:
+        for res in used:
+            await record_usage(pool, job="build_trait", teacher_id=override.teacher_id,
+                               ref_id=override.id, res=res)
 
 
 async def _load_override(pool: asyncpg.Pool, override_id: UUID) -> OverrideInfo | None:
@@ -326,11 +334,13 @@ def _text(data: dict, key: str) -> str:
     return str(data.get(key) or "").strip()
 
 
-async def _generate_trait(llm, override: OverrideInfo, context: dict) -> TraitDraft | None:
+async def _generate_trait(llm, override: OverrideInfo, context: dict, used: list) -> TraitDraft | None:
     # arah ditentukan dari angka, bukan dari LLM
     direction = "lenient" if override.new_grade > override.old_grade else "stricter"
     messages = _build_trait_messages(override, context, direction)
-    data = (await llm.complete_json(messages, max_tokens=1024)).data
+    res = await llm.complete_json(messages, max_tokens=1024)  
+    used.append(res)
+    data = res.data
     if not data:
         raise PermanentLlmError("LLM tidak mengembalikan jawaban")
 
@@ -386,7 +396,7 @@ Balas HANYA JSON: {"verdict": "same|opposite|different", "reason": "<=1 kalimat"
 
 
 
-async def _decide(llm, draft: TraitDraft, similar: list[SimilarTrait]) -> TraitDecision:
+async def _decide(llm, draft: TraitDraft, similar: list[SimilarTrait], used: list) -> TraitDecision:
     if not similar:
         return TraitDecision("insert", None, "support", "rule", None)
 
@@ -412,7 +422,9 @@ async def _decide(llm, draft: TraitDraft, similar: list[SimilarTrait]) -> TraitD
         {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
     ]
-    data = (await llm.complete_json(messages, max_tokens=200)).data
+    res = await llm.complete_json(messages, max_tokens=200) 
+    used.append(res)
+    data = res.data
     verdict = str(data.get("verdict", "")).strip().lower()
 
     if verdict == "same":

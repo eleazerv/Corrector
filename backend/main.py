@@ -20,6 +20,12 @@ from modules.complaint.router import router as complaint_router
 from modules.student.router import router as student_router   
 from modules.traits.router import router as traits_router   
 from modules.calibration.router import router as calibration_router  
+from modules.auth.router import router as auth_router
+from modules.classroom.router import router as classroom_router, students_router
+from modules.school.router import router as school_router
+from modules.subject.router import router as subject_router
+from modules.test.router import router as test_router, questions_router, class_tests_router
+from modules.notifications.router import router as notifications_router  
 from providers.storage import get_storage_provider 
 
 
@@ -71,6 +77,15 @@ def create_app() -> FastAPI :
     app.include_router(student_router, prefix=api)  
     app.include_router(traits_router, prefix=api)  
     app.include_router(calibration_router, prefix=api)   
+    app.include_router(auth_router, prefix=api)
+    app.include_router(classroom_router, prefix=api)
+    app.include_router(students_router, prefix=api)
+    app.include_router(school_router, prefix=api)
+    app.include_router(subject_router, prefix=api)
+    app.include_router(test_router, prefix=api)
+    app.include_router(questions_router, prefix=api)
+    app.include_router(class_tests_router, prefix=api)
+    app.include_router(notifications_router, prefix=api) 
     
 
     @app.get("/health", tags=["health"])
