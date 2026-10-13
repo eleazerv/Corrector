@@ -14,6 +14,7 @@ from .schemas import (
     CreateQuestionRequest,
     CreateTestRequest,
     CriteriaRequest,
+    CriteriaResponse, 
     QuestionResponse,
     TestDetailResponse,
     TestListResponse,
@@ -257,7 +258,7 @@ async def delete_question(
 
 @questions_router.put(
     "/{id}/criteria",
-    response_model=list[CriteriaRequest],
+    response_model=list[CriteriaResponse], 
 )
 async def replace_criteria(
     id: UUID,

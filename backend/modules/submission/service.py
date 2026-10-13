@@ -76,6 +76,21 @@ join students s on s.id = sc.student_id
 where ct.id = $1
 """
 
+TEST_READY_SQL = """
+select t.status, (select count(*) from test_questions q where q.test_id = t.id) as question_count
+from class_tests ct join tests t on t.id = ct.test_id
+where ct.id = $1
+"""
+
+async def ensure_test_ready(db, class_test_id: UUID) -> None:
+    row = await db.fetchrow(TEST_READY_SQL, class_test_id)
+    if row is None:
+        raise not_found("Class test")
+    if row["status"] != "ready" or row["question_count"] == 0:
+        raise AppError("TEST_NOT_READY",
+                       "Questions are not finalized. Mark the test as ready before uploading answer sheets", 409)
+
+
 async def find_student(db , class_test_id: UUID , student_id: UUID | None , nim: str | None):
     """ ngecek siswa ada ga di kelas yang ikut ujian """
     if student_id is None and not nim :

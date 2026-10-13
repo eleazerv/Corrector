@@ -1118,10 +1118,12 @@ async def create_class_test(
             403,
         )
 
-    if test["status"] != "ready":
+    # draft boleh dijadwalkan (dosen buat ujian dari kelas dulu, soal menyusul).
+    # Syarat "ready" dipindah ke upload lembar jawaban (submission.ensure_test_ready).
+    if test["status"] == "archived":
         raise AppError(
-            "TEST_NOT_READY",
-            "Only ready tests can be scheduled",
+            "TEST_ARCHIVED",
+            "Archived tests cannot be scheduled",
             400,
         )
 

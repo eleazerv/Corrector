@@ -41,6 +41,7 @@ async def upload_pages(
     arq=Depends(get_arq) 
     ): 
     await ensure_class_test_access(db, user, class_test_id)
+    await service.ensure_test_ready(db, class_test_id) 
     student = await service.find_student(db, class_test_id, student_id, nim)
     images = await service.read_images(files)
     return await service.ingest_student_pages(db, storage, arq, class_test_id, student, images)
@@ -57,6 +58,7 @@ async def upload_zip(
 ):
     """ zip dibongkar di sini ( menerima gambar maks 10 mb sehingga zip tidak bisa disimpan di storage)"""
     await ensure_class_test_access(db, user, class_test_id)
+    await service.ensure_test_ready(db, class_test_id)  
     data = await file.read(service.MAX_ZIP_BYTES + 1)
     if len(data) > service.MAX_ZIP_BYTES:  
         raise AppError("FILE_TOO_LARGE", f"ZIP exceeds {service.MAX_ZIP_BYTES // (1024 * 1024)} MB", 413)
