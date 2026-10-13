@@ -1,262 +1,183 @@
 "use client";
+// : umumkan nilai ke mahasiswa (POST /class-tests/{id}/publish) + unduh CSV.
+// Halaman ini menjelaskan dengan kalimat sederhana apa yang terjadi saat tombol ditekan.
 
 import Link from "next/link";
 import { useState } from "react";
-import { Eye, Inbox, Send } from "lucide-react";
-import { useData } from "@/lib/store";
-import { examMax, formatDateLong, scoreText, submissionAiTotal, submissionFinalTotal } from "@/lib/grading";
-import type { StudentViewSettings, Submission } from "@/lib/types";
-import { FileBadge } from "@/components/ui/badge";
-import { Button, ButtonLink } from "@/components/ui/button";
-import { Switch } from "@/components/ui/form";
-import { ConfirmModal, Modal } from "@/components/ui/modal";
+import { Download, Send, TriangleAlert } from "lucide-react";
+import { errorMessage, apiFetch } from "@/lib/api";
+import type { PublishResult } from "@/lib/backend-types";
+import { downloadFile } from "@/lib/download";
+import { BUSY_STATUSES, dateLong, num, score } from "@/lib/format";
+import { invalidate } from "@/lib/use-api";
+import { useProgress } from "@/lib/use-progress";
+import { SheetBadge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { ConfirmModal } from "@/components/ui/modal";
 import { Banner, EmptyState } from "@/components/ui/panels";
+import { LoadError, Loading } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
-import { GradeSheet } from "@/components/mahasiswa/grade-sheet";
 import { useExam } from "./exam-frame";
 
-/** Why a row cannot be selected for publication, or null when it can. */
-function blocker(s: Submission): string | null {
-  if (s.status === "published") return "Sudah dipublikasikan";
-  if (s.status === "ocr_failed") return "OCR gagal, belum ada nilai";
-  if (s.status === "review_required") return "Masih perlu review";
-  if (s.status === "uploaded" || s.status === "processing") return "Belum dinilai";
-  return null;
-}
-
 export function PublishGrades() {
-  const { exam, cls } = useExam();
-  const { data, dispatch } = useData();
+  const { ct, test, reload: reloadExam } = useExam();
+  const progress = useProgress(ct.id);
   const toast = useToast();
-  const subs = data.submissions.filter((s) => s.examId === exam.id && s.studentId);
-  const eligible = subs.filter((s) => !blocker(s));
-  const [picked, setPicked] = useState<Set<string>>(() => new Set(eligible.map((s) => s.id)));
   const [confirm, setConfirm] = useState(false);
-  const [preview, setPreview] = useState<Submission | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const selected = eligible.filter((s) => picked.has(s.id));
-  const review = subs.filter((s) => s.status === "review_required").length;
-  const failed = subs.filter((s) => s.status === "ocr_failed").length;
-  const max = examMax(exam);
+  if (progress.loading && !progress.data) return <Loading />;
+  if (progress.error || !progress.data) return <LoadError title="Data gagal dimuat." message={progress.error ?? ""} onRetry={progress.reload} />;
 
-  function toggle(id: string) {
-    setPicked((p) => {
-      const n = new Set(p);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
-  }
+  const items = progress.data.items.filter((i) => i.student_test_id);
+  const busy = items.filter((i) => BUSY_STATUSES.includes(i.status)).length;
+  const flagged = items.filter((i) => i.status === "graded" && i.needs_review).length;
+  const ready = items.filter((i) => ["graded", "reviewed"].includes(i.status)).length;
+  const published = items.filter((i) => i.status === "published").length;
+  const notReady = items.filter((i) => ["failed", "needs_reupload", "quota_exceeded"].includes(i.status)).length;
 
-  function setView(patch: Partial<StudentViewSettings>) {
-    dispatch({ type: "setStudentView", examId: exam.id, settings: { ...exam.studentView, ...patch } });
-  }
-
-  function publish() {
-    dispatch({ type: "publish", examId: exam.id, submissionIds: selected.map((s) => s.id) });
-    toast({ tone: "success", text: `Nilai ${selected.length} mahasiswa dipublikasikan. Mahasiswa kini dapat melihat nilainya.` });
-    setPicked(new Set());
+  async function publish() {
     setConfirm(false);
+    setPublishing(true);
+    setError(null);
+    try {
+      const res = await apiFetch<PublishResult>(`/class-tests/${ct.id}/publish?allow_needs_review=${flagged > 0}`, { method: "POST" });
+      toast({ tone: "success", text: `Nilai ${res.published_now} mahasiswa sudah diumumkan.` });
+      progress.reload();
+      reloadExam();
+      invalidate("/class-tests");
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setPublishing(false);
+    }
   }
 
-  if (subs.length === 0) {
+  async function download() {
+    setDownloading(true);
+    try {
+      await downloadFile(`/class-tests/${ct.id}/export.csv`, `nilai-${ct.test_name}-${ct.class_name}.csv`.replace(/\s+/g, "_"));
+    } catch (e) {
+      toast({ tone: "error", text: errorMessage(e) });
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  if (items.length === 0)
     return (
-      <EmptyState
-        icon={Inbox}
-        title="Belum ada nilai untuk dipublikasikan."
-        action={<ButtonLink href={`/dosen/ujian/${exam.id}/unggah`}>Unggah Jawaban</ButtonLink>}
-      >
-        Nilai muncul di sini setelah jawaban diproses AI dan Anda review.
+      <EmptyState icon={Send} title="Belum ada nilai untuk diumumkan.">
+        Unggah lembar jawaban dan tunggu AI selesai menilai.
       </EmptyState>
     );
-  }
-
-  const allPicked = eligible.length > 0 && selected.length === eligible.length;
 
   return (
-    <div className="space-y-8">
-      {(review > 0 || failed > 0) && (
+    <div className="space-y-6">
+      {ct.status === "published" && (
+        <Banner tone="success" title="Nilai sudah diumumkan.">
+          Mahasiswa sudah bisa melihat nilai dan penjelasannya. Rubrik dan kunci jawaban Anda tidak ikut terlihat.
+        </Banner>
+      )}
+      {busy > 0 && (
+        <Banner tone="info" title={`${busy} lembar masih diproses AI.`}>
+          Tunggu sampai selesai sebelum mengumumkan nilai.
+        </Banner>
+      )}
+      {flagged > 0 && (
         <Banner
           tone="warning"
-          title="Sebagian jawaban belum siap dipublikasikan."
+          title={`${flagged} lembar belum Anda cek.`}
           action={
-            review > 0 ? (
-              <Link
-                href={`/dosen/ujian/${exam.id}/review?filter=review`}
-                className="inline-flex min-h-11 items-center font-semibold text-primary underline underline-offset-4"
-              >
-                Review sekarang
-              </Link>
-            ) : undefined
+            <Link href={`/dosen/ujian/${ct.id}/review`} className="inline-flex min-h-11 items-center rounded-md border border-primary bg-surface px-4 font-semibold text-primary">
+              Cek sekarang
+            </Link>
           }
         >
-          {[review && `${review} jawaban masih Perlu Review`, failed && `${failed} file OCR Gagal`].filter(Boolean).join(", ")}.
-          Jawaban tersebut tidak bisa dipilih sampai selesai ditangani.
+          Sebaiknya dicek dulu. Kalau tetap diumumkan, nilai dari AI yang dipakai.
         </Banner>
       )}
-      {exam.publishedAt && (
-        <Banner tone="success" title={`Publikasi pertama: ${formatDateLong(exam.publishedAt)}.`}>
-          Perubahan nilai setelah publikasi tercatat di riwayat revisi. Batas pengajuan keberatan:{" "}
-          {exam.complaintDeadline ? formatDateLong(exam.complaintDeadline) : "tidak ditentukan"}.
+      {notReady > 0 && (
+        <Banner tone="danger" title={`${notReady} lembar belum punya nilai.`}>
+          Lembar ini tidak ikut diumumkan. Perbaiki di langkah 2 (unggah ulang) atau langkah 3 (nilai ulang).
+        </Banner>
+      )}
+      {error && (
+        <Banner tone="danger" title="Nilai belum diumumkan.">
+          {error}
         </Banner>
       )}
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
-        <section aria-labelledby="ringkasan-nilai" className="min-w-0">
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-            <h2 id="ringkasan-nilai" className="text-h2">
-              Ringkasan nilai
-            </h2>
-            <label className="flex min-h-11 cursor-pointer items-center gap-2 font-semibold">
-              <input
-                type="checkbox"
-                className="h-5 w-5 accent-primary"
-                checked={allPicked}
-                disabled={eligible.length === 0}
-                onChange={() => setPicked(allPicked ? new Set() : new Set(eligible.map((s) => s.id)))}
-              />
-              Pilih semua yang siap ({eligible.length})
-            </label>
-          </div>
-          <table className="sheet">
-            <thead>
-              <tr>
-                <th scope="col">
-                  <span className="sr-only">Pilih</span>
-                </th>
-                <th scope="col">Mahasiswa</th>
-                <th scope="col" className="num">
-                  Saran AI
-                </th>
-                <th scope="col" className="num">
-                  Nilai Final
-                </th>
-                <th scope="col">Status review</th>
-              </tr>
-            </thead>
-            <tbody>
-              {subs.map((s) => {
-                const st = data.students.find((x) => x.id === s.studentId)!;
-                const why = blocker(s);
-                const graded = s.grades.length > 0;
-                return (
-                  <tr key={s.id}>
-                    <td data-label="Pilih">
-                      <input
-                        type="checkbox"
-                        className="h-5 w-5 accent-primary"
-                        aria-label={`Pilih ${st.name}`}
-                        checked={!why && picked.has(s.id)}
-                        disabled={Boolean(why)}
-                        onChange={() => toggle(s.id)}
-                      />
-                      {why && <span className="ml-2 text-small text-text-muted sm:sr-only">{why}</span>}
-                    </td>
-                    <td data-label="Mahasiswa">
-                      <span className="block font-semibold">{st.name}</span>
-                      <span className="tabular text-small text-text-muted">{st.nim}</span>
-                    </td>
-                    <td data-label="Saran AI" className="num text-text-muted">
-                      {graded ? scoreText(submissionAiTotal(s), max) : "–"}
-                    </td>
-                    <td data-label="Nilai Final" className="num font-semibold text-primary">
-                      {graded ? scoreText(submissionFinalTotal(s), max) : "–"}
-                    </td>
-                    <td data-label="Status">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <FileBadge status={s.status} />
-                        {graded && (
-                          <button
-                            type="button"
-                            onClick={() => setPreview(s)}
-                            className="min-h-11 text-small font-semibold text-primary underline-offset-4 hover:underline md:min-h-0"
-                          >
-                            Pratinjau
-                          </button>
-                        )}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
-
-        <aside className="space-y-6 self-start">
-          <section aria-labelledby="tampilan" className="rounded-md border border-border bg-surface px-4 py-2">
-            <h2 id="tampilan" className="pt-2 font-body text-h3 font-bold">
-              Yang dilihat mahasiswa
-            </h2>
-            <div className="divide-y divide-border">
-              <Switch
-                id="sv-per"
-                label="Nilai per soal"
-                help="Menampilkan skor dan umpan balik tiap soal."
-                checked={exam.studentView.perQuestion}
-                onChange={(v) => setView({ perQuestion: v })}
-              />
-              <Switch
-                id="sv-ev"
-                label="Bukti jawaban"
-                help="Kutipan dari jawaban mahasiswa sendiri."
-                checked={exam.studentView.evidence}
-                onChange={(v) => setView({ evidence: v })}
-              />
-              <Switch
-                id="sv-reason"
-                label="Alasan perubahan nilai"
-                help="Alasan yang Anda tulis saat mengubah Saran AI."
-                checked={exam.studentView.overrideReason}
-                onChange={(v) => setView({ overrideReason: v })}
-              />
-            </div>
-          </section>
-
-          <div className="space-y-3">
-            <Button
-              icon={Eye}
-              className="w-full"
-              disabled={!subs.some((s) => s.grades.length)}
-              onClick={() => setPreview(selected[0] ?? subs.find((s) => s.grades.length) ?? null)}
-            >
-              Lihat sebagai mahasiswa
-            </Button>
-            <Button variant="publish" icon={Send} className="w-full" disabled={selected.length === 0} onClick={() => setConfirm(true)}>
-              Publikasikan Nilai ({selected.length})
-            </Button>
-            {selected.length === 0 && (
-              <p className="text-small text-text-muted">Pilih minimal satu mahasiswa yang nilainya sudah siap.</p>
-            )}
-          </div>
-        </aside>
+      <div className="flex flex-col gap-4 rounded-md border border-border bg-surface p-5 sm:flex-row sm:items-center">
+        <div className="flex-1">
+          <p className="text-h3 font-bold">
+            {ready > 0 ? `${ready} nilai siap diumumkan` : published > 0 ? "Semua nilai sudah diumumkan" : "Belum ada nilai yang siap"}
+          </p>
+          <p className="text-text-muted">
+            {published > 0 && `${published} sudah diumumkan${progress.data.published_at ? ` sejak ${dateLong(progress.data.published_at)}` : ""}. `}
+            Setelah diumumkan, mahasiswa bisa melihat nilai dan mengajukan keberatan.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button icon={Download} loading={downloading} loadingText="Mengunduh…" onClick={download}>
+            Unduh nilai (Excel/CSV)
+          </Button>
+          <Button variant="publish" icon={Send} disabled={ready === 0 || busy > 0} loading={publishing} loadingText="Mengumumkan…" onClick={() => setConfirm(true)}>
+            Umumkan nilai
+          </Button>
+        </div>
       </div>
+
+      <table className="sheet">
+        <thead>
+          <tr>
+            <th scope="col">NIM</th>
+            <th scope="col">Nama</th>
+            <th scope="col">Status</th>
+            <th scope="col" className="num">
+              Nilai
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((i) => (
+            <tr key={i.student_id}>
+              <td data-label="NIM" className="tabular">
+                {i.nim}
+              </td>
+              <td data-label="Nama">{i.name}</td>
+              <td data-label="Status">
+                <SheetBadge status={i.status} needsReview={i.needs_review} />
+              </td>
+              <td data-label="Nilai" className="num">
+                {i.total_grade === null ? "-" : score(i.total_grade, test.max_score)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
       <ConfirmModal
         open={confirm}
         onClose={() => setConfirm(false)}
         onConfirm={publish}
-        title={`Publikasikan nilai untuk ${selected.length} mahasiswa?`}
-        confirmLabel={`Publikasikan Nilai (${selected.length})`}
+        title="Umumkan nilai ke mahasiswa?"
+        confirmLabel={`Umumkan ${ready} nilai`}
         variant="publish"
-        requireCheck="Saya sudah memeriksa nilai final"
+        requireCheck="Saya sudah memeriksa nilai-nilai ini"
       >
         <p>
-          Mahasiswa akan dapat melihat nilai {exam.title} ({cls.name}). Perubahan setelah publikasi akan tercatat di riwayat
-          revisi.
+          {num(ready)} mahasiswa akan bisa melihat nilai, foto jawabannya, dan penjelasan per soal. Kunci jawaban dan kriteria
+          Anda tetap rahasia.
         </p>
-      </ConfirmModal>
-
-      <Modal open={preview !== null} onClose={() => setPreview(null)} title="Pratinjau tampilan mahasiswa" size="lg">
-        {preview && (
-          <div className="rounded-md border-2 border-success p-1">
-            <p className="px-3 py-2 text-small font-semibold text-success">
-              Pratinjau Tampilan Mahasiswa: {data.students.find((x) => x.id === preview.studentId)?.name}
-            </p>
-            <GradeSheet exam={exam} cls={cls} submission={preview} />
-          </div>
+        {flagged > 0 && (
+          <p className="flex items-start gap-2 font-semibold text-warning">
+            <Icon icon={TriangleAlert} className="mt-1 shrink-0" /> {flagged} lembar belum Anda cek dan akan diumumkan dengan nilai dari AI.
+          </p>
         )}
-      </Modal>
+      </ConfirmModal>
     </div>
   );
 }
