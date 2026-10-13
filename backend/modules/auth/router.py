@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from core.deps import CurrentUser, get_current_user
 
 from . import service
+from .schemas import MeResponse  
 
 
 router = APIRouter(
@@ -11,7 +12,7 @@ router = APIRouter(
 )
 
 
-@router.get("/me")
+@router.get("/me", response_model=MeResponse) 
 async def get_me(
     request: Request,
     user: CurrentUser = Depends(get_current_user),

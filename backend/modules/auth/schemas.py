@@ -8,3 +8,6 @@ class MeResponse(BaseModel):
     role: str
     profile_id: UUID
     school_id: UUID
+    name: str | None = None   
+    email: str | None = None   
+    nim: str | None = None    
