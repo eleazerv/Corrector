@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, LayoutDashboard, Menu, MessageSquareWarning, NotebookPen, X, type LucideIcon } from "lucide-react";
-import { useData } from "@/lib/store";
+import { Bell, BookOpen, LayoutDashboard, Menu, MessageSquareWarning, NotebookPen, X, type LucideIcon } from "lucide-react";
+//  menu memakai hitungan dari backend (keberatan menunggu, pemberitahuan belum dibaca)
+import type { NotificationItem, TeacherComplaint } from "@/lib/backend-types";
+import { useApi, useSession } from "@/lib/use-api";
 import { Icon } from "@/components/ui/icon";
-import { SampleNotice } from "@/components/ui/panels";
 import { TopBar } from "./top-bar";
 
 interface NavItem {
@@ -53,16 +54,19 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
 }
 
 export function DosenShell({ children }: { children: ReactNode }) {
-  const { data } = useData();
+  const session = useSession();
   const [drawer, setDrawer] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
-  const newComplaints = data.complaints.filter((c) => c.status === "baru").length;
+  const complaints = useApi<{ items: TeacherComplaint[]; pending: number }>("/complaints?status=pending&limit=50");
+  const notifications = useApi<{ items: NotificationItem[]; unread: number }>("/notifications?unread_only=true&limit=1");
+  const newComplaints = complaints.data?.pending ?? 0;
 
   const items: NavItem[] = [
-    { href: "/dosen", label: "Dashboard", icon: LayoutDashboard, exact: true },
+    { href: "/dosen", label: "Beranda", icon: LayoutDashboard, exact: true },
     { href: "/dosen/kelas", label: "Kelas", icon: BookOpen, match: ["/dosen/ujian"] },
     { href: "/dosen/keberatan", label: "Keberatan Nilai", icon: MessageSquareWarning, count: newComplaints },
     { href: "/dosen/catatan", label: "Catatan Penilaian", icon: NotebookPen },
+    { href: "/dosen/notifikasi", label: "Pemberitahuan", icon: Bell, count: notifications.data?.unread ?? 0 },
   ];
 
   useEffect(() => {
@@ -76,7 +80,7 @@ export function DosenShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-dvh flex-col">
       <TopBar
         home="/dosen"
-        userName={data.lecturer.name}
+        userName={session?.me?.name ?? ""}
         role="Dosen"
         leading={
           <button
@@ -90,7 +94,6 @@ export function DosenShell({ children }: { children: ReactNode }) {
           </button>
         }
       />
-      <SampleNotice />
       <div className="flex flex-1">
         <nav aria-label="Menu utama" className="hidden w-60 shrink-0 border-r border-border bg-surface p-4 lg:block">
           <NavList items={items} />

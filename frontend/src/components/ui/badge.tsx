@@ -1,7 +1,7 @@
+// badge memakai status backend (lib/format.ts), bukan lagi status data contoh.
 import { LoaderCircle } from "lucide-react";
 import type { ReactNode } from "react";
-import { COMPLAINT_STATUS, FILE_STATUS, type Tone } from "@/lib/grading";
-import type { ComplaintStatus, FileStatus } from "@/lib/types";
+import { CLASS_TEST_STATUS, COMPLAINT_STATUS, sheetStatus, type Tone } from "@/lib/format";
 import { Icon } from "./icon";
 
 const TONES: Record<Tone, string> = {
@@ -23,16 +23,23 @@ export function Badge({ tone, children, busy }: { tone: Tone; children: ReactNod
   );
 }
 
-export function FileBadge({ status }: { status: FileStatus }) {
-  const s = FILE_STATUS[status];
+/** Status lembar jawaban 1 mahasiswa. */
+export function SheetBadge({ status, needsReview }: { status: string; needsReview?: boolean }) {
+  const s = sheetStatus(status, needsReview);
   return (
-    <Badge tone={s.tone} busy={status === "processing"}>
+    <Badge tone={s.tone} busy={"busy" in s ? s.busy : false}>
       {s.label}
     </Badge>
   );
 }
 
-export function ComplaintBadge({ status }: { status: ComplaintStatus }) {
-  const s = COMPLAINT_STATUS[status];
+/** Tahap ujian di kelas. */
+export function ClassTestBadge({ status }: { status: string }) {
+  const s = CLASS_TEST_STATUS[status] ?? { label: status, tone: "neutral" as Tone };
+  return <Badge tone={s.tone}>{s.label}</Badge>;
+}
+
+export function ComplaintBadge({ status }: { status: string }) {
+  const s = COMPLAINT_STATUS[status] ?? { label: status, tone: "neutral" as Tone };
   return <Badge tone={s.tone}>{s.label}</Badge>;
 }

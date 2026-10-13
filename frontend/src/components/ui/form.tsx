@@ -104,3 +104,48 @@ export function Switch({
     </div>
   );
 }
+
+/**
+ * saklar bulat (pill) yang lebih jelas untuk aksi cepat di kartu.
+ * Label teks tetap ditulis ("Dipakai AI" / "Tidak dipakai") supaya arti tidak hanya dari warna.
+ */
+export function Toggle({
+  checked,
+  onChange,
+  label,
+  onText = "Aktif",
+  offText = "Nonaktif",
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  onText?: string;
+  offText?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className="group inline-flex min-h-11 items-center gap-3 rounded-full pr-1 disabled:cursor-wait disabled:opacity-60"
+    >
+      <span
+        className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-150 ${
+          checked ? "bg-success" : "bg-border-strong"
+        } group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-primary`}
+      >
+        <span
+          className={`absolute left-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-150 ${
+            checked ? "translate-x-5" : "translate-x-0"
+          }`}
+        />
+      </span>
+      <span className={`font-semibold ${checked ? "text-success" : "text-text-muted"}`}>{checked ? onText : offText}</span>
+    </button>
+  );
+}
