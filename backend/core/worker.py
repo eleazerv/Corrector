@@ -1,3 +1,5 @@
+from zoneinfo import ZoneInfo
+
 from arq import cron
 from arq.connections import RedisSettings
 
@@ -15,7 +17,6 @@ from providers.storage import get_storage_provider
 from tasks.build_trait import build_trait
 from tasks.embed_trait import embed_trait 
 from tasks.grade_student import grade_student
-from tasks.ingest_zip import ingest_zip
 from tasks.maintenance import reconcile_status, refresh_plans, requeue_stuck , sweep_checkpoints
 from tasks.ocr_page import MAX_TRIES as OCR_MAX_TRIES
 from tasks.ocr_page import ocr_page
@@ -24,10 +25,10 @@ import asyncio
 from supabase import acreate_client
 
 REDIS = RedisSettings.from_dsn(settings.REDIS_URL)
+TZ_WIB = ZoneInfo("Asia/Jakarta")
 DEFAULT_MAX_JOBS = 10 
 OCR_MAX_JOBS = 1 
 
-import asyncio
 import sys
 
 if sys.platform == "win32":
@@ -89,13 +90,14 @@ async def shutdown_ocr(ctx: dict) -> None:
     await _close_common(ctx)
     log.info("ocr worker stopped queue=%s", OCR_QUEUE)
 class WorkerSettings:
-    functions = [ingest_zip, grade_student, build_trait, embed_trait, summarize_complaint]
+    functions = [grade_student, build_trait, embed_trait, summarize_complaint] 
     cron_jobs = [
         cron(requeue_stuck, minute=set(range(0, 60, 5))),
         cron(reconcile_status, minute=set(range(0, 60, 10))),
-        cron(refresh_plans, hour={0}, minute={5}),
-        cron(sweep_checkpoints, hour={0}, minute={10}),
+        cron(refresh_plans, hour={0}, minute={5}),        # 00:05 WIB
+        cron(sweep_checkpoints, hour={0}, minute={10}),   # 00:10 WIB
     ]
+    timezone = TZ_WIB  
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = REDIS
