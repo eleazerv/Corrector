@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Source_Code_Pro, Source_Sans_3, Source_Serif_4 } from "next/font/google";
-import { DataProvider } from "@/lib/store";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
@@ -17,9 +16,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="id" className={`${serif.variable} ${sans.variable} ${mono.variable}`}>
       <body className="antialiased">
-        <DataProvider>
-          <ToastProvider>{children}</ToastProvider>
-        </DataProvider>
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );
