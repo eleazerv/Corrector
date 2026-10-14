@@ -1,4 +1,4 @@
-"""Bentuk body request modul traits. (sudah lengkap, tinggal dibaca)"""
+"""Bentuk body request modul traits."""
 from typing import Literal
 from uuid import UUID
 
@@ -16,9 +16,11 @@ class TraitIn(BaseModel):
                       berikutnya tetap diberikan penuh selama metodenya benar."
     """
     subject_id: UUID
-    aspect: str = Field(min_length=2, max_length=200)
-    condition: str = Field(min_length=2, max_length=500)
-    direction: Literal["lenient", "stricter"]
+    # aspect / condition / direction opsional. Form dosen cukup isi catatan;
+    # yang kosong diisi AI di worker embed_trait (dibaca dari canonical_text).
+    aspect: str | None = Field(default=None, max_length=200)
+    condition: str | None = Field(default=None, max_length=500)
+    direction: Literal["lenient", "stricter"] | None = None
     canonical_text: str = Field(min_length=10, max_length=1000)
     category: str | None = Field(default=None, max_length=100)
     class_id: UUID | None = None

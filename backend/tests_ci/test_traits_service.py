@@ -11,7 +11,7 @@ from providers.llm import TransientLlmError
 from conftest import FakeDb, FakeLlm, run, uid
 
 
-# ================================================================ resolve_conflict
+#  resolve_conflict
 def resolve(action, status="pending", exists=True):
     teacher, cid, old, new = uid(), uid(), uid(), uid()
     row = {"id": cid, "status": status, "old_trait_id": old, "new_trait_id": new} if exists else None
@@ -21,9 +21,9 @@ def resolve(action, status="pending", exists=True):
     return types.SimpleNamespace(db=db, out=out, toggles=toggles, teacher=teacher, cid=cid, old=old, new=new)
 
 
-def test_resolve_keep_old_leaves_traits_untouched():
+def test_resolve_keep_old_deactivates_new_trait():
     r = resolve("keep_old")
-    assert r.toggles == [] and r.out["status"] == "keep_old"
+    assert r.toggles == [(r.new, False)] and r.out["status"] == "keep_old"
 
 
 def test_resolve_replace_swaps_active_trait():
@@ -77,7 +77,7 @@ def test_list_conflicts_passes_filter():
     assert db.args_of(service.LIST_CONFLICTS_SQL) == [(teacher, "pending")]
 
 
-# ================================================================ patch_trait
+# patch_trait
 def patch(body, llm, current="Beri poin penuh untuk langkah yang benar."):
     teacher, trait = uid(), uid()
     updated = {"id": trait, "canonical_text": body.canonical_text or current}

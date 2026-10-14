@@ -36,6 +36,12 @@ async def list_traits(db, teacher_id: UUID, subject_id: UUID | None, include_ina
     return {"items": [dict(t) for t in traits]}
 
 
+def _clean(value: str | None) -> str | None:
+    """ string kosong -> None supaya worker tahu field ini perlu diisi AI."""
+    value = (value or "").strip()
+    return value or None
+
+
 async def create_trait(db: asyncpg.Pool, teacher_id: UUID, school_id: UUID, body) -> dict:
     """Simpan trait manual. Embedding diisi belakangan oleh worker (job embed_trait),
     supaya request ini tidak menunggu API embedding."""
@@ -53,8 +59,8 @@ async def create_trait(db: asyncpg.Pool, teacher_id: UUID, school_id: UUID, body
                canonical_text, evidence_count, is_active, source)
             values ($1, $2, $3, $4, $5, $6, $7, $8, 0, true, 'manual')
             returning {_COLS}""",
-        teacher_id, body.subject_id, body.class_id, body.category, body.aspect.strip(),
-        body.condition.strip(), body.direction, body.canonical_text.strip())
+        teacher_id, body.subject_id, body.class_id, body.category, _clean(body.aspect),
+        _clean(body.condition), body.direction, body.canonical_text.strip())  
     return dict(trait)
 
 
@@ -103,12 +109,18 @@ async def patch_trait(db: asyncpg.Pool, llm, teacher_id: UUID, trait_id: UUID, b
                            "The edit reverses the meaning of this trait. Deactivate it and create a new one.",
                            422, {"reason": reason})
 
+    # teks catatan MANUAL berubah -> aspect / condition / direction dikosongkan
+    # supaya diisi ulang AI dari kalimat baru (job embed_trait). Catatan dari AI tidak disentuh.
+    text_changed = new_text is not None and new_text != current["canonical_text"]
     trait = await db.fetchrow(f"""update teacher_traits
         set canonical_text = coalesce($3, canonical_text),
             is_active      = coalesce($4, is_active),
+            aspect         = case when $5 and source = 'manual' then null else aspect end,
+            "condition"    = case when $5 and source = 'manual' then null else "condition" end,
+            direction      = case when $5 and source = 'manual' then null else direction end,
             updated_at     = now()
         where id = $1 and teacher_id = $2
-        returning {_COLS}""", trait_id, teacher_id, new_text, body.is_active)
+        returning {_COLS}""", trait_id, teacher_id, new_text, body.is_active, text_changed)
     return dict(trait)
 
 
@@ -154,7 +166,7 @@ async def trait_evidences(db, teacher_id: UUID, trait_id: UUID) -> dict:
 
 LIST_CONFLICTS_SQL = """
     select 
-    c.id , c.status , c.override_id , c.created_at , c.resolved_at,
+    c.id , c.status , c.kind , c.override_id , c.created_at , c.resolved_at,  
     o.id as old_id, o.aspect as old_aspect, o.direction as old_direction, o.canonical_text as old_canonical_text,
     n.id as new_id, n.aspect as new_aspect, n.direction as new_direction, n.canonical_text as new_canonical_text
     from trait_conflicts c 
@@ -197,7 +209,10 @@ async def resolve_conflict(db: asyncpg.Pool, teacher_id: UUID, conflict_id: UUID
         if c["status"] != "pending":
             raise conflict("Conflict already resolved")
 
-        # keep_old: trait tidak diubah (trait baru tetap nonaktif)
+        # keep_old menonaktifkan trait baru secara eksplisit
+        # (duplikat dari catatan manual masih aktif; untuk konflik biasa sudah nonaktif -> tidak berubah)
+        if action == "keep_old":
+            await conn.execute(SET_TRAIT_ACTIVE_SQL, c["new_trait_id"], teacher_id, False)
         if action == "replace":
             await conn.execute(SET_TRAIT_ACTIVE_SQL, c["old_trait_id"], teacher_id, False)
         if action in ("replace", "keep_both"):
