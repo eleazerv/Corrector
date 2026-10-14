@@ -2,7 +2,7 @@
 // Bahasa dibuat sederhana: trait = "kebiasaan menilai Anda" yang dipelajari AI dari nilai yang Anda ubah.
 
 import { useState, type FormEvent } from "react";
-import { NotebookPen, Pencil, Plus, Scale } from "lucide-react";
+import { Copy, NotebookPen, Pencil, Plus, Scale } from "lucide-react";
 import { apiFetch, errorMessage } from "@/lib/api";
 import type { ListResponse, Subject, Trait, TraitConflict, TraitEvidence } from "@/lib/backend-types";
 import { date, num } from "@/lib/format";
@@ -14,6 +14,7 @@ import { Modal } from "@/components/ui/modal";
 import { Container, PageHeader } from "@/components/ui/page";
 import { Banner, EmptyState } from "@/components/ui/panels";
 import { LoadError, Loading } from "@/components/ui/state";
+import { Tabs, panelId, tabId } from "@/components/ui/tabs"; 
 import { useToast } from "@/components/ui/toast";
 
 const DIRECTION = { lenient: "Lebih longgar", stricter: "Lebih ketat" } as const;
@@ -24,6 +25,13 @@ export default function CatatanPage() {
   const traits = useApi<{ items: Trait[] }>(`/traits?include_inactive=true${subjectId ? `&subject_id=${subjectId}` : ""}`);
   const conflicts = useApi<{ items: TraitConflict[] }>("/traits/conflicts?status=pending");
   const [creating, setCreating] = useState(false);
+  const [tab, setTab] = useState<"all" | "active" | "inactive">("all");
+  const [stay, setStay] = useState<Set<string>>(new Set());
+  const all = traits.data?.items ?? [];
+  const activeCount = all.filter((t) => t.is_active).length;
+  const shown = all.filter(
+    (t) => tab === "all" || stay.has(t.id) || (tab === "active" ? t.is_active : !t.is_active),
+  );
   const subjectName = (id: string) => subjects.data?.items.find((s) => s.id === id)?.name ?? "";
 
   return (
@@ -80,23 +88,48 @@ export default function CatatanPage() {
         <Loading text="Memuat catatan…" />
       ) : traits.error ? (
         <LoadError title="Catatan gagal dimuat." message={traits.error} onRetry={traits.reload} />
-      ) : (traits.data?.items ?? []).length === 0 ? (
+      ) : all.length === 0 ? (
         <EmptyState icon={NotebookPen} title="Belum ada catatan penilaian.">
           Catatan muncul setelah Anda mengubah nilai dari AI di halaman Periksa Nilai, atau Anda bisa menulisnya sendiri.
         </EmptyState>
       ) : (
-        <ul className="space-y-3">
-          {traits.data!.items.map((t) => (
-            <TraitCard
-              key={t.id}
-              t={t}
-              subject={subjectName(t.subject_id)}
-              onChanged={(patch) =>
-                traits.setData((prev) => prev && { items: prev.items.map((x) => (x.id === t.id ? { ...x, ...patch } : x)) })
-              }
-            />
-          ))}
-        </ul>
+        <>
+          <Tabs
+            group="catatan"
+            label="Saring catatan"
+            value={tab}
+            onChange={(id) => {
+              setTab(id as typeof tab);
+              setStay(new Set());
+            }}
+            tabs={[
+              { id: "all", label: "Semua", count: all.length },
+              { id: "active", label: "Dipakai AI", count: activeCount },
+              { id: "inactive", label: "Tidak dipakai", count: all.length - activeCount },
+            ]}
+          />
+          <div role="tabpanel" id={panelId("catatan", tab)} aria-labelledby={tabId("catatan", tab)} className="pt-4">
+            {shown.length === 0 ? (
+              <p className="py-8 text-center text-text-muted">
+                {tab === "active" ? "Belum ada catatan yang dipakai AI." : "Semua catatan sedang dipakai AI."}
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {shown.map((t) => (
+                  <TraitCard
+                    key={t.id}
+                    t={t}
+                    subject={subjectName(t.subject_id)}
+                    onChanged={(patch) => {
+                      if (tab !== "all") setStay((prev) => new Set(prev).add(t.id));
+                      traits.setData((prev) => prev && { items: prev.items.map((x) => (x.id === t.id ? { ...x, ...patch } : x)) });
+                    }}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
       )}
 
       <CreateTraitModal
@@ -142,7 +175,7 @@ function TraitCard({ t, subject, onChanged }: { t: Trait; subject: string; onCha
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2 sm:px-5">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={t.direction === "lenient" ? "success" : "warning"}>{DIRECTION[t.direction] ?? t.direction}</Badge>
+          {t.direction && <Badge tone={t.direction === "lenient" ? "success" : "warning"}>{DIRECTION[t.direction]}</Badge>}
           <Badge tone="neutral">{t.source === "manual" ? "Ditulis sendiri" : "Dipelajari AI"}</Badge>
           {subject && <span className="text-small text-text-muted">{subject}</span>}
         </div>
@@ -228,9 +261,28 @@ function TraitCard({ t, subject, onChanged }: { t: Trait; subject: string; onCha
   );
 }
 
+const CONFLICT_TEXT = {
+  contradict: {
+    title: "Dua catatan Anda bertentangan. Mana yang benar?",
+    keep_old: ["Pakai yang lama", "Catatan lama tetap dipakai."],
+    replace: ["Pakai yang baru", "Catatan baru dipakai, yang lama dimatikan."],
+    keep_both: ["Keduanya benar (beda situasi)", "Keduanya dipakai."],
+  },
+  duplicate: {
+    title: "Catatan baru Anda mirip dengan catatan yang sudah ada.",
+    keep_old: ["Gabung (pakai yang lama)", "Digabung. Catatan lama tetap dipakai."],
+    replace: ["Pakai kalimat yang baru", "Kalimat baru dipakai, yang lama dimatikan."],
+    keep_both: ["Biarkan keduanya", "Keduanya tetap dipakai."],
+  },
+} as const;
+
 function ConflictCard({ c, onDone }: { c: TraitConflict; onDone: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(c.old_canonical_text);
+  const isDup = c.kind === "duplicate";
+  const t = CONFLICT_TEXT[isDup ? "duplicate" : "contradict"];
 
   async function resolve(action: "keep_old" | "replace" | "keep_both", msg: string) {
     setBusy(action);
@@ -245,31 +297,102 @@ function ConflictCard({ c, onDone }: { c: TraitConflict; onDone: () => void }) {
     }
   }
 
+  // duplikat: ubah catatan lama, lalu gabung (catatan baru dimatikan)
+  async function editOldAndMerge() {
+    if (text.trim().length < 10) {
+      toast({ tone: "error", text: "Tulis catatan minimal 10 huruf." });
+      return;
+    }
+    setBusy("edit");
+    try {
+      if (text.trim() !== c.old_canonical_text) {
+        await apiFetch(`/traits/${c.old_id}`, { method: "PATCH", body: JSON.stringify({ canonical_text: text.trim() }) });
+      }
+      await apiFetch(`/traits/conflicts/${c.id}/resolve`, { method: "POST", body: JSON.stringify({ action: "keep_old" }) });
+      toast({ tone: "success", text: "Catatan lama diperbarui dan digabung." });
+      onDone();
+    } catch (e) {
+      toast({ tone: "error", text: errorMessage(e) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const actions = (["keep_old", "replace", "keep_both"] as const).map((a) => (
+    <Button
+      key={a}
+      variant={a === (isDup ? "keep_old" : "replace") ? "primary" : "secondary"}
+      loading={busy === a}
+      disabled={busy !== null}
+      onClick={() => resolve(a, t[a][1])}
+    >
+      {t[a][0]}
+    </Button>
+  ));
+
   return (
-    <article className="rounded-md border-2 border-warning bg-surface p-4 sm:p-5">
+    <article className={`rounded-md border-2 bg-surface p-4 sm:p-5 ${isDup ? "border-border-strong" : "border-warning"}`}>
       <p className="flex items-center gap-2 font-semibold">
-        <Scale size={20} aria-hidden="true" /> Dua catatan Anda bertentangan. Mana yang benar?
+        {isDup ? <Copy size={20} aria-hidden="true" /> : <Scale size={20} aria-hidden="true" />} {t.title}
       </p>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div className="rounded-md bg-bg p-3">
           <p className="text-small font-semibold text-text-muted">Catatan lama</p>
-          <p className="mt-1">{c.old_canonical_text}</p>
+          {editing ? (
+            <>
+              <label htmlFor={`edit-old-${c.id}`} className="sr-only">
+                Ubah catatan lama
+              </label>
+              <textarea
+                id={`edit-old-${c.id}`}
+                rows={3}
+                className={`${textareaClass} mt-1`}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+            </>
+          ) : (
+            <p className="mt-1">{c.old_canonical_text}</p>
+          )}
         </div>
         <div className="rounded-md bg-bg p-3">
-          <p className="text-small font-semibold text-text-muted">Catatan baru (dari perubahan nilai terakhir)</p>
+          <p className="text-small font-semibold text-text-muted">
+            {c.override_id ? "Catatan baru (dari perubahan nilai terakhir)" : "Catatan baru (yang baru Anda tulis)"}
+          </p>
           <p className="mt-1">{c.new_canonical_text}</p>
         </div>
       </div>
+      {isDup && !editing && (
+        <p className="mt-3 text-small text-text-muted">
+          Supaya catatan tidak dobel, sebaiknya gabung saja. Kalau ada yang ingin ditambahkan, ubah catatan lama.
+        </p>
+      )}
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button loading={busy === "keep_old"} disabled={busy !== null} onClick={() => resolve("keep_old", "Catatan lama tetap dipakai.")}>
-          Pakai yang lama
-        </Button>
-        <Button variant="primary" loading={busy === "replace"} disabled={busy !== null} onClick={() => resolve("replace", "Catatan baru dipakai, yang lama dimatikan.")}>
-          Pakai yang baru
-        </Button>
-        <Button loading={busy === "keep_both"} disabled={busy !== null} onClick={() => resolve("keep_both", "Keduanya dipakai.")}>
-          Keduanya benar (beda situasi)
-        </Button>
+        {editing ? (
+          <>
+            <Button variant="primary" loading={busy === "edit"} disabled={busy !== null} onClick={editOldAndMerge}>
+              Simpan & gabung
+            </Button>
+            <Button
+              disabled={busy !== null}
+              onClick={() => {
+                setEditing(false);
+                setText(c.old_canonical_text);
+              }}
+            >
+              Batal
+            </Button>
+          </>
+        ) : (
+          <>
+            {actions}
+            {isDup && (
+              <Button icon={Pencil} disabled={busy !== null} onClick={() => setEditing(true)}>
+                Ubah catatan lama
+              </Button>
+            )}
+          </>
+        )}
       </div>
     </article>
   );
@@ -286,7 +409,7 @@ function CreateTraitModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [form, setForm] = useState({ subject_id: "", canonical_text: "", aspect: "", condition: "", direction: "lenient" });
+  const [form, setForm] = useState({ subject_id: "", canonical_text: "" }); 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -298,8 +421,6 @@ function CreateTraitModal({
     const errs: Record<string, string> = {};
     if (!form.subject_id) errs.subject_id = "Pilih mata kuliah.";
     if (form.canonical_text.trim().length < 10) errs.canonical_text = "Tulis catatan minimal 10 huruf.";
-    if (form.aspect.trim().length < 2) errs.aspect = "Isi bagian yang dinilai, misalnya: satuan.";
-    if (form.condition.trim().length < 2) errs.condition = "Isi kapan catatan ini berlaku.";
     setErrors(errs);
     if (Object.keys(errs).length) return;
     setSaving(true);
@@ -307,16 +428,10 @@ function CreateTraitModal({
     try {
       await apiFetch("/traits", {
         method: "POST",
-        body: JSON.stringify({
-          subject_id: form.subject_id,
-          canonical_text: form.canonical_text.trim(),
-          aspect: form.aspect.trim(),
-          condition: form.condition.trim(),
-          direction: form.direction,
-        }),
+        body: JSON.stringify({ subject_id: form.subject_id, canonical_text: form.canonical_text.trim() }),
       });
-      toast({ tone: "success", text: "Catatan tersimpan. AI memakainya mulai penilaian berikutnya." });
-      setForm({ subject_id: "", canonical_text: "", aspect: "", condition: "", direction: "lenient" });
+      toast({ tone: "success", text: "Catatan tersimpan. Kalau mirip atau bertentangan dengan catatan lain, Anda akan diberi tahu." }); 
+      setForm({ subject_id: "", canonical_text: "" }); 
       onSaved();
     } catch (err) {
       setServerError(errorMessage(err));
@@ -363,29 +478,24 @@ function CreateTraitModal({
           label="Catatan"
           required
           error={errors.canonical_text}
-          help="Contoh: Kalau salah hitung di awal terbawa ke langkah berikutnya, langkah berikutnya tetap diberi poin penuh selama caranya benar."
+          help={
+            <>
+              <span className="block">
+                Tulis <b>kapan berlaku</b> dan <b>cara menilainya</b>: beri penuh, setengah, atau tidak diberi.
+              </span>
+              <span className="block">Tidak perlu angka poin, karena poin mengikuti rubrik tiap soal.</span>
+              <span className="mt-2 block rounded-md border-l-4 border-primary bg-primary-soft px-3 py-2 text-text">
+                <span className="block font-semibold">Contoh:</span>
+                <span className="block italic">
+                  &ldquo;Kalau salah hitung di awal terbawa ke langkah berikutnya, langkah berikutnya tetap diberi penuh
+                  selama caranya benar.&rdquo;
+                </span>
+              </span>
+            </>
+          }
         >
-          <textarea id="tr-text" rows={3} className={textareaClass} value={form.canonical_text} onChange={set("canonical_text")} />
+          <textarea id="tr-text" rows={4} className={textareaClass} value={form.canonical_text} onChange={set("canonical_text")} />
         </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="tr-aspect" label="Bagian yang dinilai" required error={errors.aspect} help="Contoh: kesalahan terbawa">
-            <input id="tr-aspect" className={inputClass} value={form.aspect} onChange={set("aspect")} />
-          </Field>
-          <Field id="tr-cond" label="Berlaku kapan" required error={errors.condition} help="Contoh: hasil akhir salah karena salah hitung awal">
-            <input id="tr-cond" className={inputClass} value={form.condition} onChange={set("condition")} />
-          </Field>
-        </div>
-        <fieldset>
-          <legend className="mb-2 font-semibold">Dibanding kunci jawaban, Anda menilai…</legend>
-          <div className="flex flex-wrap gap-4">
-            {(["lenient", "stricter"] as const).map((d) => (
-              <label key={d} className="flex min-h-11 cursor-pointer items-center gap-2">
-                <input type="radio" name="direction" checked={form.direction === d} onChange={() => setForm((f) => ({ ...f, direction: d }))} className="h-5 w-5 accent-primary" />
-                {DIRECTION[d]}
-              </label>
-            ))}
-          </div>
-        </fieldset>
       </form>
     </Modal>
   );

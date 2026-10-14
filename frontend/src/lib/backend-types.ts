@@ -1,4 +1,4 @@
-//  bentuk response backend (FastAPI, prefix /api/v1).
+// Bentuk response backend (FastAPI, prefix /api/v1).
 // Disalin dari modules/*/schemas.py & service.py. Kalau backend berubah, ubah juga di sini.
 
 export type BackendRole = "teacher" | "student" | "school_admin";
@@ -300,9 +300,10 @@ export interface Trait {
   subject_id: string;
   class_id: string | null;
   category: string | null;
-  aspect: string;
-  condition: string;
-  direction: "lenient" | "stricter";
+  // 3 field ini null sampai diisi AI di worker
+  aspect: string | null;
+  condition: string | null;
+  direction: "lenient" | "stricter" | null;
   canonical_text: string;
   evidence_count: number;
   last_seen: string | null;
@@ -327,7 +328,8 @@ export interface TraitEvidence {
 export interface TraitConflict {
   id: string;
   status: "pending" | "keep_old" | "replace" | "keep_both";
-  override_id: string;
+  kind: "contradict" | "duplicate"; // catatan manual yang isinya sama atau bertentangan
+  override_id: string | null; 
   created_at: string;
   resolved_at: string | null;
   old_id: string;
