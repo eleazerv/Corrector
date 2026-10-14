@@ -10,6 +10,7 @@ jadi kuota dicek dulu supaya sekolah yang kuotanya habis tidak memakan token.
 import json 
 from collections import Counter 
 from uuid import UUID 
+from langgraph.graph import END  
 from langgraph.types import Send 
 from core.logging import log
 from providers.llm import PermanentLlmError
@@ -18,7 +19,7 @@ from . import settings as S
 from .deps import get_deps 
 from .prompts import segment_messages 
 from .question_nodes import r2
-from .text_utils import question_number 
+from .text_utils import is_short_answer_list, line_markers 
 
 LOAD_ST_SQL = """
 select st.id, st.quota_charged_at, c.school_id, t.subject_id, t.max_score,
@@ -167,71 +168,143 @@ def route_after_budget(state) -> str:
     """ ini ngarahin kalo ada budget ato engga kalo bisa ya lanjut ke segment_answer kalo engga end"""
     return "end" if state.get("run_status") == "quota_exceeded" else "segment_answers"
 
-def _heuristic_segments(questions, blocks): 
-    """Jalan urut blok; ganti soal aktif tiap ketemu penanda nomor soal di awal blok."""
-    by_number = {q["number"]: q["id"] for q in questions}
-    segs: dict[str, list[str]] = {q["id"]: [] for q in questions}  
-    seen :set[int] = set()
-    current: str | None = None 
-    unassigned = 0  
-    for b in blocks : 
-        n = question_number(b["text"])
-        if n is not None and n in by_number: 
-            current = by_number[n]
-            seen.add(n)
-        if current is None : 
-            unassigned +=1 
-            continue 
-        segs[current].append(b["id"])
-    return segs, seen, unassigned
-    
+# segmentasi = LLM pemeta utama + petunjuk (regex & posisi bbox)
 
+# Regex saja rapuh untuk tulisan tangan (langkah "1. 2. 3." di dalam jawaban, "lanjutan no. 11",
+# beberapa jawaban di 1 blok, urutan acak). Sekarang regex + posisi hanya PETUNJUK untuk LLM.
+# Jalur cepat tanpa LLM hanya kalau penanda nomor "bersih": urut naik, tiap nomor tepat sekali,
+# semua soal ketemu, tidak ada blok berisi >1 penanda.
 
-async def segment_answers(state,config):   
-    """"
-        ini fungsinya segmentasi jawaban per soal 
-        jika tidak ketemu segmentasi heuristik
-        pakai segmentasi dari LLM
-    """
-    questions , blocks = state["questions"], state["blocks"]
-    if not questions:
-        return {"segments": {}, "segment_method": "none"}
-    if len(questions) == 1:
-        return {"segments": {questions[0]["id"]: [b["id"] for b in blocks]},
-                "segment_method": "single"}
-        
-    segs, seen, unassigned = _heuristic_segments(questions, blocks)
+def _block_hints(questions, blocks) -> dict[str, dict]:
+    """Petunjuk per blok: nomor soal di awal baris (regex) + apakah di margin kiri + posisi y."""
     numbers = {q["number"] for q in questions}
-    if seen == numbers and unassigned <= 2: 
-        return {"segments": segs, "segment_method": "heuristic"}
-    
-    deps = get_deps(config)
-    async with deps.semaphore : 
-        res = await deps.llm.complete_json(segment_messages(questions, blocks, S.SEGMENT_TEXT_PREVIEW))
-    mapping = res.data.get("mapping") or {}
+    left_by_page: dict[int, int] = {}
+    for b in blocks:
+        if len(b.get("bbox") or []) == 4:
+            left_by_page[b["page_no"]] = min(left_by_page.get(b["page_no"], 1000), int(b["bbox"][0]))
+    hints = {}
+    for b in blocks:
+        h = {}
+        marks = [n for n in line_markers(b["text"]) if n in numbers]
+        if marks:
+            h["petunjuk_nomor"] = marks
+        bb = b.get("bbox") or []
+        if len(bb) == 4:
+            h["kiri"] = int(bb[0]) <= left_by_page.get(b["page_no"], 0) + S.SEGMENT_LEFT_MARGIN
+            h["y"] = int(bb[1])
+        hints[b["id"]] = h
+    return hints
+
+
+def _heuristic_segments(questions, blocks, hints):
+    """Jalur cepat. Return (segs, seen, clean). clean=False -> serahkan ke LLM."""
+    by_number = {q["number"]: q["id"] for q in questions}
+    segs: dict[str, list[str]] = {q["id"]: [] for q in questions}
+    order: list[int] = []
+    current: str | None = None
+    unassigned, multi = 0, False
+    for b in blocks:
+        marks = hints.get(b["id"], {}).get("petunjuk_nomor", [])
+        if len(marks) > 1:
+            multi = True
+        if marks:
+            current = by_number[marks[0]]
+            order.append(marks[0])
+        if current is None:
+            unassigned += 1
+            continue
+        segs[current].append(b["id"])
+    seen = set(order)
+    clean = (not multi and seen == set(by_number) and len(order) == len(seen)
+             and order == sorted(order) and unassigned <= 2)
+    return segs, seen, clean
+
+
+def _parse_llm_mapping(data, questions, blocks, hints) -> tuple[dict[str, list[str]], set[str], list[int]]:
+    """Validasi output LLM. 1 blok 1 soal, KECUALI blok yang memuat >1 petunjuk nomor."""
+    mapping = data.get("mapping") if isinstance(data, dict) else None
+    mapping = mapping if isinstance(mapping, dict) else {}
     valid_ids = {b["id"] for b in blocks}
+    multi_ok = {b["id"] for b in blocks
+                if len(hints.get(b["id"], {}).get("petunjuk_nomor", [])) > 1
+                and is_short_answer_list(b["text"], S.SEGMENT_SHORT_LINE)}
     by_number = {str(q["number"]): q["id"] for q in questions}
-    llm_segs: dict[str, list[str]] = {q["id"]: [] for q in questions}
+    segs: dict[str, list[str]] = {q["id"]: [] for q in questions}
     used: set[str] = set()
     for num, ids in mapping.items():
         qid = by_number.get(str(num).strip().rstrip("."))
         if qid is None or not isinstance(ids, list):
             continue
-        for bid in ids:
-            bid = str(bid)
-            if bid in valid_ids and bid not in used:       # 1 blok hanya 1 soal
-                llm_segs[qid].append(bid)
-                used.add(bid)
+        for bid in map(str, ids):
+            if bid not in valid_ids or bid in segs[qid]:
+                continue
+            if bid in used and bid not in multi_ok:
+                continue
+            segs[qid].append(bid)
+            used.add(bid)
     order = {b["id"]: i for i, b in enumerate(blocks)}
-    for qid in llm_segs:
-        llm_segs[qid].sort(key=order.get)
-    flags = [f"segmentasi LLM (penanda nomor ketemu: {sorted(seen)})"]
-    return {"segments": llm_segs, "segment_method": "llm", "tokens": res.usage.total, "flags": flags}
+    for qid in segs:
+        segs[qid].sort(key=order.get)
+    raw_doubt = data.get("ragu") if isinstance(data, dict) else None
+    numbers = {q["number"] for q in questions}
+    doubt = sorted({int(x) for x in (raw_doubt if isinstance(raw_doubt, list) else [])
+                    if str(x).strip().isdigit() and int(x) in numbers})
+    return segs, used, doubt
+
+
+async def segment_answers(state, config):
+    """Petakan blok OCR ke soal. Lihat penjelasan di atas ."""
+    questions, blocks = state["questions"], state["blocks"]
+    if not questions:
+        return {"segments": {}, "segment_method": "none"}
+    if len(questions) == 1:
+        return {"segments": {questions[0]["id"]: [b["id"] for b in blocks]},
+                "segment_method": "single"}
+
+    # tidak ada blok sama sekali -> bukan lembar jawaban, jangan panggil LLM
+    if not blocks and not state.get("only_questions"):
+        return {"segments": {}, "segment_method": "none", "run_status": "not_answer_sheet",
+                "flags": [S.NOT_SHEET_REASON]}
+
+    hints = _block_hints(questions, blocks)
+    segs, seen, clean = _heuristic_segments(questions, blocks, hints)
+    if clean and S.SEGMENT_FAST_PATH:
+        return {"segments": segs, "segment_method": "heuristic"}
+
+    deps = get_deps(config)
+    try:
+        async with deps.semaphore:
+            res = await deps.llm.complete_json(
+                segment_messages(questions, blocks, S.SEGMENT_TEXT_PREVIEW, hints),
+                max_tokens=S.SEGMENT_MAX_TOKENS)
+    except PermanentLlmError as e:
+        # LLM gagal permanen -> pakai hasil regex apa adanya, tapi lembar wajib dicek dosen
+        return {"segments": segs, "segment_method": "heuristic",
+                "flags": [f"segmentasi LLM gagal, pakai penanda nomor saja: {e}"[:200]]}
+
+    llm_segs, used, doubt = _parse_llm_mapping(res.data, questions, blocks, hints)
+    # flag = paksa lembar "Perlu dicek" (cross_check/persist). Info biasa cukup di log, supaya
+    # lembar yang dipetakan LLM dengan yakin tidak otomatis masuk review.
+    log.info("segment_answers %s: llm, penanda=%s, ragu=%s", state.get("student_test_id"), sorted(seen), doubt)
+    flags = []
+    if doubt:
+        flags.append(f"pemetaan jawaban ragu untuk soal {doubt}")
+
+    # 0 penanda + LLM tidak memetakan apa pun -> foto salah / bukan lembar jawaban
+    if not seen and not used and not state.get("only_questions"):
+        return {"segments": llm_segs, "segment_method": "llm", "tokens": res.usage.total,
+                "run_status": "not_answer_sheet", "flags": flags + [S.NOT_SHEET_REASON]}
+    out = {"segments": llm_segs, "segment_method": "llm", "tokens": res.usage.total}
+    if flags:
+        out["flags"] = flags
+    return out
 
 
 
 def dispatch(state):
     """Conditional edge: 1 Send per soal -> paralel. (Fungsi routing, bukan node.)"""
+    if state.get("run_status") == "not_answer_sheet":     
+        return END
     blocks = {b["id"]: b for b in state["blocks"]}
     only = set(state.get("only_questions") or [])
     sends = []

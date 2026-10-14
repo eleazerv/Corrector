@@ -96,7 +96,7 @@ def build_submission_graph(checkpointer=None):
     g.add_edge("load_submission", "budget_guard")
     g.add_conditional_edges("budget_guard", SN.route_after_budget,
                             {"end": END, "segment_answers": "segment_answers"})
-    g.add_conditional_edges("segment_answers", SN.dispatch, ["grade_question", "aggregate"])
+    g.add_conditional_edges("segment_answers", SN.dispatch, ["grade_question", "aggregate", END]) 
     g.add_edge("grade_question", "aggregate")
     g.add_edge("aggregate", "cross_check")
     g.add_edge("cross_check", "persist")

@@ -64,7 +64,7 @@ class SubmissionState(TypedDict, total=False):
     only_questions: list[str]             # regrade sebagian soal (kosong = semua)
     
     # budget_guard / hasil akhir
-    run_status: str                       # running | quota_exceeded | graded | failed
+    run_status: str                       # running | quota_exceeded | graded | failed | not_answer_sheet 
     
     # dari subgraph (reducer: dijumlah / digabung dari banyak Send paralel)
     results: Annotated[list[QuestionResult], operator.add]

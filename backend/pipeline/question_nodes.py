@@ -26,7 +26,8 @@ from . import settings as S
 
 from .calculator import evaluate , is_close , normalize_kind , run_symbolic 
 from .deps import get_deps 
-from .prompts import advocate_messages, calc_plan_messages, grade_messages, judge_messages, trait_filter_messages
+from .prompts import (advocate_messages, calc_plan_messages, equivalence_messages, grade_messages,  # changed by claude
+                      judge_messages, trait_filter_messages)
 from .text_utils import compact, compact_answer, garbage_ratio, normalize, remove_copied_question, strip_marker
 
 
@@ -114,44 +115,79 @@ async def zero_score(state, config):
 
 
 
-# --- objective ( ga perlu LLM sama sekali contoh : jawaban singkat )
-_OPTION_RE = re.compile(r"(?:^|[^a-z])([a-e])(?:[\.\)\s]|$)", re.IGNORECASE)
+# --- objective (changed by claude: HYBRID)
+# Regex / hitungan HANYA boleh memutuskan "benar" (cocok persis). Selain itu -> LLM menilai kesetaraan
+# (mahasiswa sering menulis ISI opsi, mis. "3" untuk kunci "c"). LLM ragu / gagal -> Perlu dicek.
+# Dulu: tidak ketemu huruf opsi = langsung salah dengan confidence 1.0 (tanpa review).
+_FILLER_RE = re.compile(r"\b(?:jawaban|jawab|jwb|pilihan|opsi)\b", re.IGNORECASE)
+
+
+def _rule_correct(key: str, ans: str) -> tuple[bool, str | None]:
+    """(benar_pasti, catatan). benar_pasti=False berarti 'belum tahu', BUKAN salah."""
+    key_c = compact(key)
+    if len(key_c) == 1 and key_c.isalpha():                 # pilihan ganda, kunci "c"
+        letters = compact(_FILLER_RE.sub(" ", normalize(ans)))
+        if letters == key_c:
+            return True, None
+        if 2 <= len(letters) <= 5 and set(letters) <= set("abcde"):
+            return False, f"lebih dari satu opsi terbaca: {letters}"
+        return False, None
+    key_a, ans_a = compact_answer(key), compact_answer(ans)
+    if key_a and ans_a == key_a:
+        return True, None
+    kv = evaluate(key.split("=")[-1]) if key else None      # isian angka: bandingkan nilai
+    av = evaluate(ans.split("=")[-1]) if ans else None      # "f'(0)=1" -> 1
+    if kv is not None and av is not None and is_close(kv, av):
+        return True, None
+    return False, None
+
 
 async def exact_match(state, config):
-    """"
-    exact_match hanya dipakai untuk soal isian singkat atau pilihan ganda 
-    ( rare case )
-    """
+    """Soal objective (pilihan ganda / isian singkat). Hybrid: aturan dulu, LLM untuk sisanya."""
     q = state["q_question"]
     ans, key = strip_marker(state.get("q_answer_text", "")), q["key_answer"] or ""
-    key_c, ans_c = compact(key), compact(ans)
-    is_choice = len(key_c) == 1 and key_c.isalpha()
+    sure, note = _rule_correct(key, ans)
+    notes = [note] if note else []
+    tokens = 0
 
-    correct: bool | None
-    notes: list[str] = []
-    if is_choice:                                           # pilihan ganda: kunci "b"
-        options = {m.lower() for m in _OPTION_RE.findall(normalize(ans))}
-        if len(options) > 1:
-            correct, notes = None, [f"lebih dari satu opsi terbaca: {sorted(options)}"]
-        else:
-            correct = key_c in options or ans_c == key_c
+    if sure:
+        correct, confidence, how = True, 1.0, "cocok dengan kunci"
+    elif note:                                               # mis. "b/c" -> jangan ditebak
+        correct, confidence, how = None, 0.3, "jawaban ganda"
     else:
-
-        key_a, ans_a = compact_answer(key), compact_answer(ans)
-        correct = bool(key_a) and (ans_a == key_a or f" {normalize(key)} " in f" {normalize(ans)} ")
-        if not correct:
-  
-            correct = None
-            notes = ["isian tidak cocok persis dengan kunci; cek manual"]
+        deps = get_deps(config)
+        try:
+            async with deps.semaphore:
+                res = await deps.llm.complete_json(equivalence_messages(q, ans), max_tokens=S.EQUIV_MAX_TOKENS,
+                                                   temperature=0.0)
+            tokens = res.usage.total
+            data = res.data if isinstance(res.data, dict) else {}
+            verdict = str(data.get("verdict", "")).strip().lower()
+            reason = str(data.get("alasan", ""))[:200]
+            if reason:
+                notes.append(f"cek setara (AI): {reason}")
+        except TransientLlmError:
+            raise
+        except Exception as e:
+            verdict = "ragu"
+            notes.append(f"cek setara gagal: {e}"[:200])
+        if verdict == "benar":
+            correct, confidence, how = True, 0.9, "setara dengan kunci (AI)"
+        elif verdict == "salah":
+            correct, confidence, how = False, S.EQUIV_WRONG_CONFIDENCE, "tidak setara dengan kunci (AI)"
+        else:
+            correct, confidence, how = None, 0.3, "perlu dicek dosen"
 
     ids = [b["id"] for b in state.get("q_blocks", [])]
     final = [{"criterion_id": c["id"], "points": c["points"] if correct else 0.0,
               "max_points": c["points"], "evidence_block_ids": ids,
-              "reasoning": "cocok dengan kunci" if correct else "tidak cocok dengan kunci",
+              "reasoning": how,
               "feedback": "Jawaban benar." if correct else "Jawaban belum tepat."}
              for c in q["criteria"]]
-    return {"q_final": final, "q_confidence": 1.0 if correct is not None else 0.3,
-            "q_needs_review": correct is None, "q_notes": notes}
+    out = {"q_final": final, "q_confidence": confidence, "q_needs_review": correct is None, "q_notes": notes}
+    if tokens:
+        out["q_tokens"] = tokens
+    return out
 
 
 # traits 

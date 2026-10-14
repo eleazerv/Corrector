@@ -33,8 +33,13 @@ MIN_COPIED_WORDS = 8                  # >= 8 kata berurutan sama dengan soal = d
 GARBAGE_RATIO = 0.60                  # porsi karakter aneh -> kemungkinan OCR rusak
 
 # segment_answers
-IGNORED_LABELS = {"pageheader", "page-header", "pagefooter", "page-footer"}
+IGNORED_LABELS = {"pageheader", "page-header", "pagefooter", "page-footer", "picture", "figure", "image"}
+NOT_SHEET_REASON = "Foto tidak terlihat seperti lembar jawaban ujian ini (tidak ada jawaban yang bisa dipetakan ke soal)" 
 SEGMENT_TEXT_PREVIEW = 160            # karakter per blok yang dikirim ke LLM
+SEGMENT_FAST_PATH = True              # True -> lewati LLM kalau penanda nomor "bersih" (urut naik, lengkap, tidak dobel)
+SEGMENT_MAX_TOKENS = 2000             # output mapping
+SEGMENT_LEFT_MARGIN = 120             # bbox skala 0-1000: x0 <= (x0 paling kiri di halaman + ini) -> "di margin kiri"
+SEGMENT_SHORT_LINE = 40               # baris bernomor <= ini = jawaban singkat (boleh 1 blok banyak soal)
 
 # budget_guard
 REQUIRE_ACTIVE_PLAN = False           # True -> sekolah tanpa paket aktif tidak bisa grading
@@ -45,3 +50,7 @@ QUESTION_TRANSIENT_RETRIES = 2
 QUESTION_RETRY_DELAY = 15.0           # detik, dikali nomor percobaan
 
 MAX_TEXT_CHARS = 6000                 # potong teks panjang sebelum masuk prompt
+
+# changed by claude: exact_match hybrid
+EQUIV_MAX_TOKENS = 200                # output verdict LLM kesetaraan jawaban singkat
+EQUIV_WRONG_CONFIDENCE = 0.9          # LLM bilang salah -> tidak otomatis review

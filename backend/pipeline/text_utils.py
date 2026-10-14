@@ -4,13 +4,16 @@ import unicodedata
 
 _WS = re.compile(r"\s+")
 
+#  awalan boleh "jawaban" + "no/nomor/soal" (2 kata)
 QUESTION_MARK_RE = re.compile(
-    r"^\s*(?:no(?:mor)?\.?|soal|jawaban|jwb\.?)?\s*(\d{1,2})[a-z]?\s*[\.\)\:](?!\d)",
+    r"^\s*(?:(?:jawaban|jwb\.?)\s*)?(?:no(?:mor)?\.?|soal)?\s*(\d{1,2})[a-z]?\s*[\.\)\:](?!\d)",
     re.IGNORECASE,
 )
 
 
-QUESTION_WORD_RE = re.compile(r"^\s*(?:no(?:mor)?\.?|soal)\s*(\d{1,2})\b", re.IGNORECASE)
+#  terima juga "jawaban nomor 1", "jawaban no. 2", "jwb soal 3", "jawaban 4"
+QUESTION_WORD_RE = re.compile(r"^\s*(?:(?:jawaban|jwb\.?)\s*(?:no(?:mor)?\.?|soal)?|no(?:mor)?\.?|soal)\s*(\d{1,2})\b",
+                              re.IGNORECASE)
 
 
 
@@ -69,6 +72,32 @@ def garbage_ratio(text: str) -> float:
 def question_number(text: str) -> int | None:
     m = QUESTION_WORD_RE.match(text or "") or QUESTION_MARK_RE.match(text or "")
     return int(m.group(1)) if m else None
+
+
+def line_markers(text: str) -> list[int]:
+    """nomor soal di awal SETIAP baris blok (mis. "1. c\n2. b" -> [1, 2]).
+    Dipakai sebagai petunjuk untuk LLM, bukan keputusan akhir."""
+    out = []
+    for line in (text or "").splitlines():
+        n = question_number(line)
+        if n is not None:
+            out.append(n)
+    return out
+
+
+def is_short_answer_list(text: str, max_line: int = 40) -> bool:
+    """ blok berisi beberapa jawaban singkat, mis. "1. c\n2. b\n3. c".
+    Syarat: >= 2 baris bernomor, nomornya NAIK tanpa dobel, dan tiap baris bernomor pendek.
+    Menolak "1. jelaskan ... contohnya:\n1.\n2." (dobel / baris panjang) dan "1.\n1b." (dobel)."""
+    nums, lines = [], []
+    for line in (text or "").splitlines():
+        n = question_number(line)
+        if n is not None:
+            nums.append(n)
+            lines.append(line.strip())
+    if len(nums) < 2 or any(b <= a for a, b in zip(nums, nums[1:])):
+        return False
+    return all(len(l) <= max_line for l in lines)
 
 
 def strip_marker(text: str) -> str:

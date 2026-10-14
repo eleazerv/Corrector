@@ -25,6 +25,8 @@ import time
 from uuid import UUID 
 
 import asyncpg
+
+from pipeline import settings as S  
 import psycopg  #  error koneksi checkpointer (OperationalError) = sementara, di-retry
 from arq import Retry
 
@@ -95,6 +97,13 @@ update student_tests set status = 'grading' where id = $1 and status <> 'grading
 MARK_STUDENT_FAILED_SQL = """
 update student_tests set status = 'failed' where id = $1 and status = 'grading'
 
+"""
+
+# foto bukan lembar jawaban -> lembar + semua halaman minta unggah ulang
+# (reupload_page hanya menerima halaman needs_reupload / failed)
+MARK_NOT_SHEET_SQL = """
+with st as (update student_tests set status = 'needs_reupload' where id = $1 returning id)
+update test_pages set status = 'needs_reupload', error = $2 where student_test_id = (select id from st)
 """
 
 MARK_STUDENT_QUOTA_EXCEEDED_SQL = """
@@ -226,6 +235,13 @@ async def _run_pipeline(ctx: dict, st: StudentTestInfo, run_id: UUID, thread_id:
         return RunResult("quota_exceeded", None, int(state.get("tokens", 0) or 0), 0, 0, 0,
                          state.get("segment_method"), {"flags": state.get("flags", [])})
     
+    # changed by claude: bukan lembar jawaban -> tidak dinilai, kuota tidak dipotong, dosen unggah ulang
+    if state.get("run_status") == "not_answer_sheet":
+        await ctx["db"].execute(MARK_NOT_SHEET_SQL, st.id, S.NOT_SHEET_REASON)
+        await _publish(ctx, st, {"event": "page_needs_reupload", "reason": "not_answer_sheet"})
+        return RunResult("skipped", None, int(state.get("tokens", 0) or 0), 0, 0, 0,
+                         state.get("segment_method"), {"flags": state.get("flags", [])})
+
     return RunResult(
         status="succeeded" if state.get("run_status") == "graded" else "failed",
         total_grade=state.get("total_grade"),
