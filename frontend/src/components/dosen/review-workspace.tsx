@@ -21,6 +21,7 @@ import { LoadError, Loading } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { AnswerPhoto } from "./answer-photo";
 import { useExam } from "./exam-frame";
+import { MathText } from "@/components/ui/math-text"; // changed by claude: tampilkan LaTeX
 
 const GRADED = ["graded", "reviewed", "published"];
 
@@ -273,11 +274,11 @@ function SheetPanel({
                 <div className="space-y-3">
                   <div>
                     <p className="text-small font-semibold">Jawaban mahasiswa (hasil baca AI)</p>
-                    <p className="whitespace-pre-wrap rounded-md bg-bg px-3 py-2 font-mono text-small">{a.answer_text || "(kosong)"}</p>
+                    <MathText className="rounded-md bg-bg px-3 py-2 text-small" text={a.answer_text || "(kosong)"} />
                   </div>
                   <InternalPanel>
                     <p className="text-small font-semibold">Kunci jawaban</p>
-                    <p className="whitespace-pre-wrap text-small">{a.question.key_answer}</p>
+                    <MathText className="text-small" text={a.question.key_answer} />
                   </InternalPanel>
                 </div>
               </details>

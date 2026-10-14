@@ -15,6 +15,7 @@ import { LoadError, Loading } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { AnswerPhoto } from "./answer-photo";
 import { useExam } from "./exam-frame";
+import { MathText } from "@/components/ui/math-text"; // changed by claude: tampilkan LaTeX
 
 export function Calibration() {
   const { ct } = useExam();
@@ -119,7 +120,7 @@ export function Calibration() {
             </p>
             <p>{item.question.text}</p>
             <InternalPanel title="Kunci & kriteria">
-              <p className="whitespace-pre-wrap">{item.question.key_answer}</p>
+              <MathText text={item.question.key_answer} />
               {item.question.criteria.length > 0 && (
                 <ul className="mt-2 list-disc pl-5 text-small">
                   {item.question.criteria.map((c) => (
@@ -133,7 +134,7 @@ export function Calibration() {
             {item.answer_text && (
               <details>
                 <summary className="min-h-11 cursor-pointer py-2 font-semibold text-primary">Teks jawaban (hasil baca AI)</summary>
-                <p className="whitespace-pre-wrap rounded-md bg-bg px-3 py-2 font-mono text-small">{item.answer_text}</p>
+                <MathText className="rounded-md bg-bg px-3 py-2 text-small" text={item.answer_text} />
               </details>
             )}
             {item.teacher_grade !== null ? (
