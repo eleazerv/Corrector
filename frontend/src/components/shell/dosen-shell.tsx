@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation"; 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bell, BookOpen, LayoutDashboard, Menu, MessageSquareWarning, NotebookPen, X, type LucideIcon } from "lucide-react";
-//  menu memakai hitungan dari backend (keberatan menunggu, pemberitahuan belum dibaca)
+// Menu memakai hitungan dari backend (keberatan menunggu, pemberitahuan belum dibaca)
 import type { NotificationItem, TeacherComplaint } from "@/lib/backend-types";
 import { useApi, useSession } from "@/lib/use-api";
+import { useTeacherEvents } from "@/lib/use-teacher-events"; 
+import { useToast } from "@/components/ui/toast"; 
 import { Icon } from "@/components/ui/icon";
 import { TopBar } from "./top-bar";
 
@@ -60,6 +62,13 @@ export function DosenShell({ children }: { children: ReactNode }) {
   const complaints = useApi<{ items: TeacherComplaint[]; pending: number }>("/complaints?status=pending&limit=50");
   const notifications = useApi<{ items: NotificationItem[]; unread: number }>("/notifications?unread_only=true&limit=1");
   const newComplaints = complaints.data?.pending ?? 0;
+  // notifikasi realtime (SSE) -> lonceng & halaman Catatan langsung terbarui
+  const toast = useToast();
+  const router = useRouter();
+  useTeacherEvents(Boolean(session), (e) => {
+    if (e.event === "notification" && e.title)
+      toast({ tone: "info", text: e.title, action: { label: "Lihat", onClick: () => router.push("/dosen/catatan") } });
+  });
 
   const items: NavItem[] = [
     { href: "/dosen", label: "Beranda", icon: LayoutDashboard, exact: true },

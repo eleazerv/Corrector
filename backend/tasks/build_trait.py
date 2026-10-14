@@ -12,6 +12,7 @@ import asyncpg
 from arq import Retry
 
 from core.llm_usage import record_usage 
+from core.notify import publish_teacher  
 from core.logging import log
 from providers.embedding.base import PermanentEmbeddingError, TransientEmbeddingError, to_pgvector
 from providers.llm.base import PermanentLlmError, TransientLlmError
@@ -242,6 +243,11 @@ async def _process(ctx: dict, override_id: UUID) -> dict:
         if saved.conflict_id is not None:
             result["conflict_id"] = str(saved.conflict_id)
             result["new_trait_id"] = str(saved.new_trait_id)
+            await publish_teacher(ctx.get("redis"), override.teacher_id, {   
+                "event": "notification", "kind": "trait_conflict",
+                "title": "Koreksi baru bertentangan dengan kebiasaan menilai Anda",
+                "conflict_id": str(saved.conflict_id)})
+        await publish_teacher(ctx.get("redis"), override.teacher_id, {"event": "traits_changed"})  
         return result
     finally:
         for res in used:

@@ -20,6 +20,11 @@ export class ApiError extends Error {
   }
 }
 
+// dipakai juga untuk EventSource (SSE) yang tidak lewat apiFetch
+export function apiUrl(path: string) {
+  return url(path);
+}
+
 function url(path: string) {
   if (/^https?:\/\//.test(path)) return path;
   return `${API_URL}${path.startsWith(API_PREFIX) ? "" : API_PREFIX}${path}`;
