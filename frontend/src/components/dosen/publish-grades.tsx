@@ -1,5 +1,5 @@
 "use client";
-// : umumkan nilai ke mahasiswa (POST /class-tests/{id}/publish) + unduh CSV.
+// Umumkan nilai ke mahasiswa (POST /class-tests/{id}/publish) + unduh CSV.
 // Halaman ini menjelaskan dengan kalimat sederhana apa yang terjadi saat tombol ditekan.
 
 import Link from "next/link";

@@ -1,5 +1,5 @@
 "use client";
-//  : dashboard memakai data backend. Dibuat sesederhana mungkin:
+// Dashboard memakai data backend. Dibuat sesederhana mungkin:
 // "Perlu tindakan Anda" (daftar tugas dengan 1 tombol jelas) di atas, daftar kelas di bawah.
 
 import Link from "next/link";

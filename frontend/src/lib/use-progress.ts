@@ -1,5 +1,5 @@
 "use client";
-//  progres 1 ujian (GET /class-tests/{id}/progress), otomatis diperbarui
+// Progres 1 ujian (GET /class-tests/{id}/progress), otomatis diperbarui
 // tiap 5 detik selama masih ada lembar yang sedang dibaca/dinilai AI.
 import { useEffect } from "react";
 import type { Progress } from "./backend-types";

@@ -1,5 +1,5 @@
 "use client";
-// : kerangka halaman 1 ujian (id di URL = class_test id).
+// Kerangka halaman 1 ujian (id di URL = class_test id).
 // Mengambil GET /class-tests/{id} + GET /tests/{test_id}, lalu dibagikan ke halaman anak lewat useExam().
 
 import { usePathname } from "next/navigation";
@@ -56,7 +56,7 @@ export function ExamFrame({ examId, children }: { examId: string; children: Reac
     {
       href: `${base}/rubrik`,
       label: "Soal & Kunci",
-      // changed by : selesai = soal ada + ditandai lengkap (status 'ready')
+      // selesai = soal ada + ditandai lengkap (status 'ready')
       hint: !hasQuestions ? "Belum ada soal" : t.status === "ready" ? `${t.questions.length} soal, lengkap` : `${t.questions.length} soal, belum ditandai lengkap`,
       done: hasQuestions && t.status === "ready",
     },

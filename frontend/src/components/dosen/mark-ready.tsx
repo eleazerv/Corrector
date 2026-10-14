@@ -1,5 +1,5 @@
 "use client";
-//  tombol "Soal sudah lengkap" -> PATCH /tests/{id} status 'ready'.
+// Tombol "Soal sudah lengkap" -> PATCH /tests/{id} status 'ready'.
 // Backend hanya mengizinkan upload lembar jawaban kalau ujian sudah 'ready' (minimal 1 soal, poin kriteria valid).
 
 import { useState } from "react";

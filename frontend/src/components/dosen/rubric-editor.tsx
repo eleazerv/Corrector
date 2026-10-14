@@ -78,8 +78,8 @@ function problems(d: Draft): Record<string, string> {
 }
 
 export function RubricEditor() {
-  const { ct, test, reload } = useExam(); //
-  const router = useRouter(); //
+  const { ct, test, reload } = useExam();
+  const router = useRouter();
   const toast = useToast();
   const [drafts, setDrafts] = useState<Draft[]>(() => test.questions.map(fromQuestion));
   const [selected, setSelected] = useState(0);

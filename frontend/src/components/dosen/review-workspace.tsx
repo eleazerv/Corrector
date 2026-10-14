@@ -1,5 +1,5 @@
 "use client";
-// : halaman "Periksa Nilai" memakai backend.
+// Halaman "Periksa Nilai" memakai backend.
 // Kiri: daftar mahasiswa (yang perlu dicek di atas). Kanan: foto + nilai per soal.
 // Aksi dosen dibuat sedikit & jelas: "Ubah nilai" per soal, "Nilai sudah benar" per lembar, "Nilai ulang" kalau gagal.
 

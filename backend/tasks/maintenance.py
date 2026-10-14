@@ -140,7 +140,6 @@ limit $3
 # ------------------------------------------------------------------ cron
 async def requeue_stuck(ctx: dict) -> dict:
     """Tiap 5 menit. Urutan penting: run yatim ditutup dulu, baru lembar 'grading' dicek."""
-    #
     pool: asyncpg.Pool = ctx["db"]
     runs_failed = await _fail_orphan_runs(pool)
     pages = await _requeue_stuck_pages(ctx)

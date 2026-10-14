@@ -2,6 +2,5 @@ samples/
 .vscode/
 __pycache__/
 supabase/
-# changed by claude: dump DB lokal, jangan di-commit
 schema.sql
 tables.sql

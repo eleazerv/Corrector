@@ -169,7 +169,6 @@ async def result(db, class_test_id: UUID, teacher_id: UUID) -> dict:
     if n == 0:
         return {"count": 0, "items": [], "summary": None}
 
-    # 
     summary = {
         "mean_teacher_pct": round(sum(i["teacher_grade"] / i["max_points"] for i in items) / n * 100, 1),
         "mean_ai_pct": round(sum(i["ai_grade"] / i["max_points"] for i in items) / n * 100, 1),

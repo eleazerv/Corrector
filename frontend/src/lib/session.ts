@@ -1,4 +1,4 @@
-//  penyimpanan sesi login (token Supabase + profil dari /auth/me).
+// Penyimpanan sesi login (token Supabase + profil dari /auth/me).
 // Disimpan di modul (bukan React state) supaya apiFetch, yang bukan hook, bisa membaca token.
 // localStorage hanya untuk kenyamanan: kalau kosong/diblokir, user cukup klik peran lagi.
 

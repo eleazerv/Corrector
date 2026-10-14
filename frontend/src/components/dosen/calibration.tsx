@@ -1,5 +1,5 @@
 "use client";
-//  "Uji akurasi AI" (kalibrasi blind). Dosen menilai ±10 jawaban TANPA melihat nilai AI,
+// "Uji akurasi AI" (kalibrasi blind). Dosen menilai ±10 jawaban TANPA melihat nilai AI,
 // lalu sistem membandingkan. Satu jawaban per layar supaya tidak membingungkan.
 
 import { useState } from "react";
