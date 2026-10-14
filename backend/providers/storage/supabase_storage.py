@@ -1,5 +1,6 @@
 from supabase import AsyncClient 
 from core.logging import log 
+from core.config import settings 
 from .base import StorageError , StorageNotFound 
 
 
@@ -15,6 +16,21 @@ def _pick(data: dict, *keys:str):
 def _is_not_found(e:Exception)-> bool : 
     text = str(e).lower()
     return "not found" in text or "404" in text or "does not exist" in text 
+
+def _public(url: str) -> str:
+    """ ganti host internal (mis. http://host.docker.internal:54321)
+    dengan SUPABASE_PUBLIC_URL supaya link foto bisa dibuka browser. Path + token tidak diubah.
+    Juga menangani signed URL relatif ("/object/sign/...") dari versi supabase-py tertentu."""
+    public = (settings.SUPABASE_PUBLIC_URL or "").rstrip("/")
+    if not public or not url:
+        return url
+    internal = settings.SUPABASE_URL.rstrip("/")
+    if url.startswith(internal):
+        return public + url[len(internal):]
+    if url.startswith("/"):
+        return f"{public}/storage/v1{url}" if not url.startswith("/storage/") else public + url
+    return url
+
 
 class SupabaseStorage: 
     def __init__(self, sb:AsyncClient,bucket:str): 
@@ -52,7 +68,7 @@ class SupabaseStorage:
                 raise StorageNotFound(f"file {key} not found") from e
             raise StorageError(f" signed_url failed url key={key}:{e}") from e
         
-        return _pick(res,"signedURL","signedUrl","signed_url")
+        return _public(_pick(res,"signedURL","signedUrl","signed_url"))  
     
     async def presign_upload(self,key:str)-> dict : 
         try : 
