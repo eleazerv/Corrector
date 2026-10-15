@@ -1,7 +1,7 @@
 samples/
 .vscode/
 __pycache__/
-supabase/
 schema.sql
 tables.sql
 .env
+supabase/snippets/
