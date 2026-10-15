@@ -16,7 +16,7 @@ services:
       REDIS_URL: redis://redis:6379        # menimpa nilai di env_file
     expose: ["8000"]                       # cuma bisa diakses dari jaringan compose (nginx)
     restart: unless-stopped
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [default, supabase]          # akses Supabase lewat network internal
     depends_on:
       redis: { condition: service_healthy }
     healthcheck:
@@ -33,7 +33,7 @@ services:
     command: arq core.worker.WorkerSettings
     restart: unless-stopped
     stop_grace_period: 60s
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [default, supabase]          #  akses Supabase lewat network internal
     depends_on:
       api: { condition: service_healthy }
 
@@ -44,14 +44,37 @@ services:
     command: arq core.worker.OcrWorkerSettings
     restart: unless-stopped
     stop_grace_period: 60s
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [default, supabase]          #  akses Supabase lewat network internal
     depends_on:
       api: { condition: service_healthy }
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-/}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+        NEXT_PUBLIC_DEMO_DOSEN_EMAIL: ${NEXT_PUBLIC_DEMO_DOSEN_EMAIL:-dosen01@und.joints.test}
+        NEXT_PUBLIC_DEMO_MAHASISWA_EMAIL: ${NEXT_PUBLIC_DEMO_MAHASISWA_EMAIL:-mhs001@und.joints.test}
+        NEXT_PUBLIC_DEMO_PASSWORD: ${NEXT_PUBLIC_DEMO_PASSWORD:-Joints123!}
+    image: joints-frontend
+    expose: ["3000"]                       # cuma lewat nginx
+    restart: unless-stopped
+
   nginx:
     image: nginx:1.27-alpine
-    ports: ["80:80"]
+    ports: ["0.0.0.0:80:80"]               #  satu-satunya port publik
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [default, supabase]          #  akses Supabase lewat network internal
     depends_on:
       api: { condition: service_healthy }
+      frontend: { condition: service_started }
+
+# network yang dibuat `npx supabase start` (nama = supabase_network_<project_id>).
+# Jalankan Supabase dulu sebelum `docker compose up`, kalau tidak compose error "network not found".
+networks:
+  supabase:
+    external: true
+    name: supabase_network_JOINTS
