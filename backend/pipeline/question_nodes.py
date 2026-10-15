@@ -26,7 +26,7 @@ from . import settings as S
 
 from .calculator import evaluate , is_close , normalize_kind , run_symbolic 
 from .deps import get_deps 
-from .prompts import (advocate_messages, calc_plan_messages, equivalence_messages, grade_messages,  # changed by claude
+from .prompts import (advocate_messages, calc_plan_messages, equivalence_messages, grade_messages,  
                       judge_messages, trait_filter_messages)
 from .text_utils import compact, compact_answer, garbage_ratio, normalize, remove_copied_question, strip_marker
 
@@ -115,7 +115,7 @@ async def zero_score(state, config):
 
 
 
-# --- objective (changed by claude: HYBRID)
+# --- objective / pilihan ganda ---
 # Regex / hitungan HANYA boleh memutuskan "benar" (cocok persis). Selain itu -> LLM menilai kesetaraan
 # (mahasiswa sering menulis ISI opsi, mis. "3" untuk kunci "c"). LLM ragu / gagal -> Perlu dicek.
 # Dulu: tidak ketemu huruf opsi = langsung salah dengan confidence 1.0 (tanpa review).

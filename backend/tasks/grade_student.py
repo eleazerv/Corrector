@@ -235,7 +235,7 @@ async def _run_pipeline(ctx: dict, st: StudentTestInfo, run_id: UUID, thread_id:
         return RunResult("quota_exceeded", None, int(state.get("tokens", 0) or 0), 0, 0, 0,
                          state.get("segment_method"), {"flags": state.get("flags", [])})
     
-    # changed by claude: bukan lembar jawaban -> tidak dinilai, kuota tidak dipotong, dosen unggah ulang
+    # bukan lembar jawaban -> tidak dinilai, kuota tidak dipotong, dosen unggah ulang
     if state.get("run_status") == "not_answer_sheet":
         await ctx["db"].execute(MARK_NOT_SHEET_SQL, st.id, S.NOT_SHEET_REASON)
         await _publish(ctx, st, {"event": "page_needs_reupload", "reason": "not_answer_sheet"})

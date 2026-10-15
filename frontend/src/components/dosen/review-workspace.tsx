@@ -21,7 +21,7 @@ import { LoadError, Loading } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { AnswerPhoto } from "./answer-photo";
 import { useExam } from "./exam-frame";
-import { MathText } from "@/components/ui/math-text"; // changed by claude: tampilkan LaTeX
+import { MathText } from "@/components/ui/math-text";
 
 const GRADED = ["graded", "reviewed", "published"];
 

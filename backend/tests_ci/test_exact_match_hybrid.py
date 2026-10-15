@@ -1,4 +1,4 @@
-"""changed by claude: exact_match hybrid (aturan hanya konfirmasi benar, sisanya LLM)."""
+""" exact_match hybrid (aturan hanya konfirmasi benar, sisanya LLM)."""
 import pytest
 
 from pipeline import question_nodes as QN

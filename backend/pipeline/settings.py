@@ -51,6 +51,6 @@ QUESTION_RETRY_DELAY = 15.0           # detik, dikali nomor percobaan
 
 MAX_TEXT_CHARS = 6000                 # potong teks panjang sebelum masuk prompt
 
-# changed by claude: exact_match hybrid
+# check_equivalence
 EQUIV_MAX_TOKENS = 200                # output verdict LLM kesetaraan jawaban singkat
 EQUIV_WRONG_CONFIDENCE = 0.9          # LLM bilang salah -> tidak otomatis review

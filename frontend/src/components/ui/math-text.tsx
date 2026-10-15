@@ -1,5 +1,5 @@
 "use client";
-// changed by claude: tampilkan teks hasil OCR yang berisi LaTeX (mis. "\frac{2}{x^2+1}", "\begin{aligned}…")
+// tampilkan teks hasil OCR yang berisi LaTeX (mis. "\frac{2}{x^2+1}", "\begin{aligned}…")
 // sebagai rumus yang enak dibaca. Teks biasa tetap teks biasa.
 // - blok \begin{…}…\end{…} -> rumus tampilan (display)
 // - baris yang memuat perintah LaTeX (\frac, \lim, ^{…}, …) -> rumus inline; kata Indonesia (>= 3 huruf)
@@ -58,8 +58,6 @@ export function MathText({ text, className = "" }: { text: string; className?: s
         ) : (
           <span
             key={i}
-            // changed by claude: inline tanpa overflow (overflow-x-auto bikin scrollbar vertikal di pecahan);
-            // blok panjang boleh scroll ke samping saja
             className={p.block ? "my-1 block overflow-x-auto overflow-y-hidden py-1" : "inline"}
             dangerouslySetInnerHTML={{ __html: p.value }}
           />
