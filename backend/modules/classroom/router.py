@@ -52,6 +52,8 @@ async def list_classes(
     items, total = await service.list_classes(
         db,
         user.school_id,
+        user.role,          
+        user.profile_id,  
     )
 
     return ClassListResponse(
@@ -98,6 +100,8 @@ async def get_class(
         db,
         id,
         user.school_id,
+        user.role,          
+        user.profile_id,    
     )
 
     if result is None:
@@ -178,6 +182,8 @@ async def list_class_students(
         db,
         id,
         user.school_id,
+        user.role,          
+        user.profile_id,    
     )
 
     if result is None:

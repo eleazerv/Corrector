@@ -17,6 +17,25 @@ from .schemas import (
 # ============================================================
 # HELPER
 # ============================================================
+TEACHER_CAN_VIEW_SQL = """
+SELECT EXISTS (
+    SELECT 1 FROM classes c
+    WHERE c.id = $1
+      AND (c.teacher_id = $2
+           OR EXISTS (SELECT 1 FROM class_tests ct
+                      WHERE ct.class_id = c.id AND ct.corrector_id = $2))
+)
+"""
+
+
+async def can_view_class(db, class_row, user_role: str, user_profile_id: UUID) -> bool:
+    """(akses kelas): True kalau user boleh melihat kelas ini."""
+    if user_role != "teacher":
+        return True
+    if class_row["teacher_id"] == user_profile_id:
+        return True
+    return bool(await db.fetchval(TEACHER_CAN_VIEW_SQL, class_row["id"], user_profile_id))
+
 
 async def get_class(
     db,
@@ -96,7 +115,11 @@ async def get_class_response(
 async def list_classes(
     db,
     school_id: UUID,
+    user_role: str,            
+    user_profile_id: UUID,      
 ):
+    # dosen hanya melihat kelas miliknya / yang ia koreksi
+    only_mine = user_role == "teacher"
     rows = await db.fetch(
         """
         SELECT
@@ -117,6 +140,10 @@ async def list_classes(
         LEFT JOIN class_tests ct
           ON ct.class_id = c.id
         WHERE c.school_id = $1
+          AND (NOT $2::boolean
+               OR c.teacher_id = $3
+               OR EXISTS (SELECT 1 FROM class_tests ct2
+                          WHERE ct2.class_id = c.id AND ct2.corrector_id = $3))
         GROUP BY
             c.id,
             c.school_id,
@@ -128,6 +155,8 @@ async def list_classes(
         ORDER BY c.name
         """,
         school_id,
+        only_mine,
+        user_profile_id,
     )
 
     items = [
@@ -156,7 +185,14 @@ async def get_class_detail(
     db,
     class_id: UUID,
     school_id: UUID,
+    user_role: str,            
+    user_profile_id: UUID,    
 ):
+    class_row = await get_class(db, class_id, school_id)
+    # kelas dosen lain -> None (404), keberadaannya tidak bocor
+    if class_row is None or not await can_view_class(db, class_row, user_role, user_profile_id):
+        return None
+
     class_response = await get_class_response(
         db,
         class_id,
@@ -551,6 +587,8 @@ async def list_class_students(
     db,
     class_id: UUID,
     school_id: UUID,
+    user_role: str,             
+    user_profile_id: UUID,    
 ):
     class_exists = await get_class(
         db,
@@ -558,7 +596,8 @@ async def list_class_students(
         school_id,
     )
 
-    if class_exists is None:
+    #  kelas dosen lain -> None (404)
+    if class_exists is None or not await can_view_class(db, class_exists, user_role, user_profile_id):
         return None
 
     rows = await db.fetch(
