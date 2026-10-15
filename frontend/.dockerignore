@@ -1,0 +1,20 @@
+
+# dependency & hasil build lama (dibuat ulang di dalam image)
+node_modules
+.next
+out
+tsconfig.tsbuildinfo
+*.log
+
+# rahasia: NEXT_PUBLIC_* masuk lewat build arg, .env tidak boleh ikut ke image
+.env
+.env.*
+
+# tidak dibutuhkan saat build
+.git
+.gitignore
+Dockerfile
+.dockerignore
+README.md
+coverage
+mt-test.mjs
