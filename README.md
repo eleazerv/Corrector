@@ -405,6 +405,17 @@ SUPABASE_PUBLIC_URL=http://<ip-vm>
 CORS_ORIGINS=["http://<ip-vm>"]
 ```
 
+Tutup port Supabase dari internet (permanen, tetap aktif setelah restart):
+
+```bash
+sudo cp ~/Corrector/deploy/supabase-firewall.service /etc/systemd/system/
+sudo systemctl enable --now supabase-firewall
+```
+
+**Server yang port 80-nya sudah dipakai nginx lain** (server bersama): tambahkan `HTTP_BIND=127.0.0.1:8095`
+di `.env` root, lalu teruskan domain ke `http://127.0.0.1:8095` dari nginx server itu (pakai
+`proxy_buffering off` dan `client_max_body_size 60m`).
+
 Membuat file di VM: `nano backend/.env.docker` → paste → **Ctrl+O**, **Enter** (simpan) → **Ctrl+X** (keluar).
 
 **5. Deploy pertama**

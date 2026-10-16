@@ -33,9 +33,13 @@ echo "==> Build & restart container"
 docker compose up -d --build --remove-orphans
 docker image prune -f >/dev/null
 
-echo "==> Cek http://localhost/health"
+# alamat nginx compose di host: 0.0.0.0:80, atau HTTP_BIND dari .env root
+addr="$(docker compose port nginx 80 | head -1)"
+health="http://${addr/0.0.0.0/127.0.0.1}/health"
+
+echo "==> Cek $health"
 for _ in $(seq 1 12); do
-  if curl -fsS -o /dev/null http://localhost/health; then
+  if curl -fsS -o /dev/null "$health"; then
     docker compose ps
     echo "Deploy selesai: $(git log -1 --format='%h %s')"
     exit 0
