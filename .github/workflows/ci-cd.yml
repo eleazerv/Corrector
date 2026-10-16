@@ -1,0 +1,110 @@
+name: CI/CD
+
+# PR ke main: tes saja. Push ke main (merge PR) atau tombol "Run workflow": tes lalu deploy ke VM.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Push beruntun ke main mengantre (deploy tidak pernah tumpang tindih); run PR lama dibatalkan.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"            # sama dengan backend/Dockerfile
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m pytest tests_ci -q
+
+  frontend:
+    name: Frontend lint & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      # cuma untuk cek build; image asli di-build di VM dengan .env root
+      NEXT_PUBLIC_API_URL: /
+      NEXT_PUBLIC_SUPABASE_URL: /
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
+      NEXT_PUBLIC_DEMO_DOSEN_EMAIL: dosen01@und.joints.test
+      NEXT_PUBLIC_DEMO_MAHASISWA_EMAIL: mhs001@und.joints.test
+      NEXT_PUBLIC_DEMO_PASSWORD: Joints123!
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22                  # sama dengan frontend/Dockerfile
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  deploy:
+    name: Deploy ke VM
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VM_HOST: ${{ secrets.VM_HOST }}
+      VM_USER: ${{ secrets.VM_USER }}
+    steps:
+      # Semua secret kosong = VM belum disiapkan -> deploy dilewati. Terisi sebagian = salah setting -> gagal.
+      - name: Cek secret
+        id: secrets
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          missing=""
+          for v in VM_HOST VM_USER VM_SSH_KEY; do [ -n "${!v}" ] || missing="$missing $v"; done
+          if [ "$missing" = " VM_HOST VM_USER VM_SSH_KEY" ]; then
+            echo "::notice::Deploy dilewati: secret VM_HOST, VM_USER, VM_SSH_KEY belum diisi"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$missing" ]; then
+            echo "::error::Secret belum diisi:$missing (Settings > Secrets and variables > Actions)"
+            exit 1
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.secrets.outputs.ready == 'true'
+        uses: actions/checkout@v5
+
+      - name: Siapkan SSH
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # Skrip dikirim dari commit yang sedang di-deploy, jadi versinya selalu sama dengan kodenya.
+      - name: Jalankan deploy/deploy.sh di VM
+        if: steps.secrets.outputs.ready == 'true'
+        run: ssh -o ServerAliveInterval=30 "$VM_USER@$VM_HOST" "bash -s -- $GITHUB_SHA" < deploy/deploy.sh

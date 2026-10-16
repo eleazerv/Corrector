@@ -82,14 +82,15 @@ nginx (port 80): / → Next.js · /api → FastAPI · /auth/v1, /storage/v1/obje
 | AI | DeepSeek V4 Flash (LLM), Gemini Embedding, SymPy, LangGraph |
 | OCR | Datalab (Chandra) |
 | Database | Supabase (Postgres 17 + pgvector, Storage, Auth) |
-| Deploy | Docker Compose + nginx |
+| Deploy | Docker Compose + nginx, GitHub Actions (CI/CD) |
 
 ```
 backend/      FastAPI, worker ARQ, pipeline LangGraph (pipeline/), provider OCR/LLM/storage (providers/)
   tests_ci/   unit test (tanpa DB/Redis/LLM asli)
 frontend/     Next.js (halaman dosen & mahasiswa)
 supabase/     config.toml, migrations/, seed.sql (akun demo)
-deploy/       nginx.conf
+deploy/       nginx.conf, deploy.sh (dijalankan CI/CD di VM)
+.github/      workflow CI/CD (tes + deploy)
 scripts/      skrip uji manual (OCR, LLM, storage, end-to-end) — bukan unit test
 ```
 
@@ -145,8 +146,8 @@ npx supabase status
 | Publishable key / anon key | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (frontend) |
 | Studio URL (`http://127.0.0.1:54323`) | dashboard database |
 
-**Buat bucket Storage** (sekali saja): buka Studio → **Storage** → **New bucket** → beri nama
-(mis. `answer-sheets`), biarkan **Public = off**. Nama ini diisi ke `SUPABASE_BUCKET`.
+Bucket Storage `joints-uploads` (private, maks 10 MB per file) dibuat otomatis dari `supabase/config.toml`.
+Nama ini diisi ke `SUPABASE_BUCKET`.
 
 ### Langkah 3. Isi environment backend
 
@@ -160,7 +161,7 @@ ENV=development
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
 SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_KEY=<secret / service_role key>
-SUPABASE_BUCKET=answer-sheets
+SUPABASE_BUCKET=joints-uploads
 SUPABASE_PUBLIC_URL=http://127.0.0.1:54321
 
 REDIS_URL=redis://localhost:6379
@@ -302,14 +303,127 @@ python -m pytest tests_ci -q      # venv harus aktif
 | Foto jawaban tidak muncul di halaman review | Cek `SUPABASE_PUBLIC_URL`: Docker `http://localhost` (atau IP VM), manual `http://127.0.0.1:54321` |
 | `No module named pytest` | Python global yang terpanggil. Aktifkan venv dulu |
 | Kode diubah tapi perilaku sama (Docker) | `docker compose up -d --build api worker worker-ocr` |
+| Job deploy: `Secret belum diisi: ...` | Sebagian secret belum ditambah owner repo (Persiapan VM, langkah 3) |
+| Job deploy: `Permission denied (publickey)` | `VM_USER` salah, `VM_SSH_KEY` tidak lengkap (baris BEGIN/END), atau `gha_key.pub` belum masuk `~/.ssh/authorized_keys` |
+| Job deploy: `ada file yang diedit langsung di VM` | Ubah file itu lewat repo. Di VM buang editannya: `git checkout -- <nama-file>` |
+| Build di VM berhenti dengan `Killed` / exit 137 | RAM habis. Cek swap aktif: `free -h` |
 
-## Deploy ke VM
+## Deploy ke VM (CI/CD)
 
-1. Install Docker + Node di VM, lalu clone repo.
-2. `npx supabase start`, buat bucket, isi `backend/.env.docker` dan `.env` root seperti Opsi A dengan `SUPABASE_PUBLIC_URL=http://<ip-vm>`.
-3. `docker compose up -d --build`.
-4. **Firewall cloud provider: buka hanya port 22 dan 80.** Port Supabase (54321–54324) jangan dibuka ke publik. Port Docker melewati `ufw`, jadi atur di firewall/security group provider.
-5. Buka Studio dari laptop lewat SSH tunnel: `ssh -L 54323:localhost:54323 user@ip-vm`.
+GitHub Actions ([.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml)) berjalan otomatis:
+
+| Kejadian | Yang dijalankan |
+|---|---|
+| Pull request ke `main` | Tes backend (`pytest tests_ci`), lint + build frontend |
+| Push / merge ke `main` | Tes yang sama, lalu kalau lulus: SSH ke VM dan jalankan [deploy/deploy.sh](deploy/deploy.sh) |
+| Tab **Actions** → **CI/CD** → **Run workflow** | Deploy ulang manual |
+
+`deploy.sh` mengambil commit tersebut, memastikan Supabase jalan, menjalankan migration baru,
+`docker compose up -d --build`, lalu cek `/health`. Kalau build gagal, container lama tetap jalan.
+Isi `backend/.env.docker` dan `.env` root **hanya ada di VM**, tidak disimpan di GitHub.
+Selama 3 secret di langkah 3 belum diisi, job deploy dilewati (tes tetap jalan).
+
+### Persiapan VM (sekali saja)
+
+VM: Ubuntu 22.04/24.04, minimal **2 vCPU, 4 GB RAM, 30 GB disk**. Firewall cloud provider:
+**buka hanya port 22 dan 80.** Port Supabase (54321–54324) jangan dibuka ke publik. Port Docker
+melewati `ufw`, jadi atur di firewall/security group provider.
+
+Semua perintah dijalankan **di VM** (masuk dulu dengan `ssh user@ip-vm`).
+
+**1. Install Docker, Node 22, dan swap 4 GB** (build Next.js butuh RAM besar)
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs git
+
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+Keluar (`exit`) lalu `ssh` lagi supaya grup `docker` aktif. Cek: `docker ps` tanpa `sudo` tidak error.
+
+**2. Kunci supaya VM bisa clone repo** (repo ini private)
+
+```bash
+ssh-keygen -t ed25519 -N "" -C "corrector-vm" -f ~/.ssh/id_ed25519
+cat ~/.ssh/id_ed25519.pub
+```
+
+Owner repo membuka **Settings → Deploy keys → Add deploy key**. Title `VM`, Key = isi `.pub` tadi,
+**Allow write access jangan dicentang** → **Add key**. Lalu di VM:
+
+```bash
+git clone git@github.com:eleazerv/Corrector.git ~/Corrector     # jawab "yes" saat ditanya fingerprint
+```
+
+**3. Kunci supaya GitHub Actions bisa masuk ke VM**
+
+Dibuat oleh **owner repo** di laptopnya (PowerShell/terminal), supaya kunci privat tidak perlu dikirim lewat chat:
+
+```bash
+ssh-keygen -t ed25519 -C "github-actions" -f gha_key     # tekan Enter 2x (tanpa passphrase)
+```
+
+Hasilnya 2 file: `gha_key` (privat, rahasia) dan `gha_key.pub` (publik, aman dikirim).
+Isi `gha_key.pub` dikirim ke pemegang VM, yang menjalankan di VM:
+
+```bash
+echo "<isi gha_key.pub>" >> ~/.ssh/authorized_keys
+whoami          # kirim hasilnya ke owner repo, untuk VM_USER
+```
+
+Owner repo membuka **Settings → Secrets and variables → Actions → New repository secret**, buat 3 secret:
+
+| Name | Isi |
+|---|---|
+| `VM_HOST` | IP publik VM |
+| `VM_USER` | hasil `whoami` di VM |
+| `VM_SSH_KEY` | isi file `gha_key` (buka dengan Notepad, salin semuanya termasuk baris BEGIN dan END) |
+
+Setelah tersimpan, owner menghapus `gha_key` dari laptopnya.
+
+**4. Supabase, bucket, dan file env**
+
+```bash
+cd ~/Corrector
+npx supabase start
+npx supabase status      # catat Secret key dan Publishable key
+```
+
+Buat `backend/.env.docker`: isi seperti template **Langkah 3**, dengan alamat Supabase dari **Opsi A1**.
+Buat `.env` root seperti **Opsi A2**. Bedanya hanya alamat VM:
+
+```env
+SUPABASE_BUCKET=joints-uploads
+SUPABASE_PUBLIC_URL=http://<ip-vm>
+CORS_ORIGINS=["http://<ip-vm>"]
+```
+
+Tutup port Supabase dari internet (permanen, tetap aktif setelah restart):
+
+```bash
+sudo cp ~/Corrector/deploy/supabase-firewall.service /etc/systemd/system/
+sudo systemctl enable --now supabase-firewall
+```
+
+**Server yang port 80-nya sudah dipakai nginx lain** (server bersama): tambahkan `HTTP_BIND=127.0.0.1:8095`
+di `.env` root, lalu teruskan domain ke `http://127.0.0.1:8095` dari nginx server itu (pakai
+`proxy_buffering off` dan `client_max_body_size 60m`).
+
+Membuat file di VM: `nano backend/.env.docker` → paste → **Ctrl+O**, **Enter** (simpan) → **Ctrl+X** (keluar).
+
+**5. Deploy pertama**
+
+Setelah langkah 1–4 selesai: buka tab **Actions** di GitHub → **CI/CD** → **Run workflow** (branch `main`).
+Tunggu ketiga job hijau, lalu buka `http://<ip-vm>`. Setelah itu setiap push/merge ke `main` otomatis ter-deploy.
+
+Studio dari laptop lewat SSH tunnel: `ssh -L 54323:localhost:54323 user@ip-vm`, lalu buka http://localhost:54323.
+
+Rollback ke commit lama (di VM): `bash ~/Corrector/deploy/deploy.sh <hash-commit>`.
 
 ## Keamanan
 

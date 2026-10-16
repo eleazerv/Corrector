@@ -1,0 +1,21 @@
+# Tutup port Supabase CLI (54321-54324) dari internet. Supabase lokal memakai password dan key
+# default, jadi port ini tidak boleh terbuka. Akses dari VM sendiri (localhost, SSH tunnel ke
+# Studio) dan antar-container tetap jalan. ufw tidak bisa dipakai: port Docker melewatinya.
+#
+# Pasang sekali di VM:
+#   sudo cp ~/Corrector/deploy/supabase-firewall.service /etc/systemd/system/
+#   sudo systemctl enable --now supabase-firewall
+[Unit]
+Description=Block public access to Supabase CLI ports 54321-54324
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'iptables -C DOCKER-USER -p tcp -m conntrack --ctorigdstport 54321:54324 --ctdir ORIGINAL -j DROP 2>/dev/null || iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 54321:54324 --ctdir ORIGINAL -j DROP'
+ExecStart=-/bin/sh -c 'ip6tables -C DOCKER-USER -p tcp -m conntrack --ctorigdstport 54321:54324 --ctdir ORIGINAL -j DROP 2>/dev/null || ip6tables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 54321:54324 --ctdir ORIGINAL -j DROP'
+ExecStart=/bin/sh -c 'ip6tables -C INPUT -p tcp --dport 54321:54324 ! -i lo -j DROP 2>/dev/null || ip6tables -I INPUT -p tcp --dport 54321:54324 ! -i lo -j DROP'
+
+[Install]
+WantedBy=multi-user.target
