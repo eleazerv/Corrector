@@ -442,5 +442,4 @@ Rollback ke commit lama (di VM): `bash ~/Corrector/deploy/deploy.sh <hash-commit
 | Upload berupa foto | Upload **PDF** hasil scan |
 | Approve nilai per lembar | Approve **per soal** dan publish sebagian |
 
-## Tim
 
