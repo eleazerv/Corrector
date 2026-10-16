@@ -6,7 +6,7 @@ Dosen cukup memotret lembar jawaban. BeeCorrect membaca tulisan tangan dan rumus
 menilai setiap kriteria rubrik, lalu menampilkan **bukti nilai langsung di foto jawaban**.
 Dosen tinggal review dan umumkan.
 
-> Repo ini bernama `Corrector`; di dalam kode project ini juga disebut **JOINTS**.
+
 
 | ⏱️ Hemat waktu | 💰 Hemat biaya | 🧾 Biaya per ujian |
 |:---:|:---:|:---:|
