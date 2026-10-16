@@ -444,8 +444,3 @@ Rollback ke commit lama (di VM): `bash ~/Corrector/deploy/deploy.sh <hash-commit
 
 ## Tim
 
-| Nama | Peran |
-|---|---|
-| Eleazer | Backend & AI pipeline |
-| [Nama] | [Peran] |
-| [Nama] | [Peran] |
