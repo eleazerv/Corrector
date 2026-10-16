@@ -759,10 +759,13 @@ async def add_students(
                 class_id,
             )
 
+    # fixed by claude: teruskan role & profil (signature list_class_students berubah)
     result = await list_class_students(
         db,
         class_id,
         school_id,
+        user_role,
+        user_profile_id,
     )
 
     return result
