@@ -1,0 +1,10 @@
+.env
+.env.*
+.env.cloud
+venv/
+venv-ocr/
+__pycache__/
+tests/
+tests_ci/
+Dockerfile
+.dockerignore

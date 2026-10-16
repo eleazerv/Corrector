@@ -1,0 +1,7 @@
+samples/
+.vscode/
+__pycache__/
+schema.sql
+tables.sql
+.env
+supabase/snippets/

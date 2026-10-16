@@ -13,6 +13,20 @@ from core.errors import register_error_handlers
 from core.logging import setup_logging
 from core.middleware import request_context_middleware
 from db.pool import create_db_pool
+from modules.submission.router import router as submission_router 
+from modules.review.router import router as review_router
+from modules.publish.router import router as publish_router
+from modules.complaint.router import router as complaint_router
+from modules.student.router import router as student_router   
+from modules.traits.router import router as traits_router   
+from modules.calibration.router import router as calibration_router  
+from modules.auth.router import router as auth_router
+from modules.classroom.router import router as classroom_router, students_router
+from modules.school.router import router as school_router
+from modules.subject.router import router as subject_router
+from modules.test.router import router as test_router, questions_router, class_tests_router
+from modules.notifications.router import router as notifications_router  
+from providers.storage import get_storage_provider 
 
 
 
@@ -24,6 +38,7 @@ async def lifespan(app:FastAPI):
     app.state.db = await create_db_pool()
     app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
     app.state.arq = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
+    app.state.storage = get_storage_provider(app.state.supabase)
         
     yield
     
@@ -55,6 +70,23 @@ def create_app() -> FastAPI :
     register_error_handlers(app)
     
     api ="/api/v1"
+    app.include_router(submission_router, prefix=api) 
+    app.include_router(review_router, prefix=api)
+    app.include_router(publish_router, prefix=api)
+    app.include_router(complaint_router, prefix=api)   
+    app.include_router(student_router, prefix=api)  
+    app.include_router(traits_router, prefix=api)  
+    app.include_router(calibration_router, prefix=api)   
+    app.include_router(auth_router, prefix=api)
+    app.include_router(classroom_router, prefix=api)
+    app.include_router(students_router, prefix=api)
+    app.include_router(school_router, prefix=api)
+    app.include_router(subject_router, prefix=api)
+    app.include_router(test_router, prefix=api)
+    app.include_router(questions_router, prefix=api)
+    app.include_router(class_tests_router, prefix=api)
+    app.include_router(notifications_router, prefix=api) 
+    
 
     @app.get("/health", tags=["health"])
     async def health(): 

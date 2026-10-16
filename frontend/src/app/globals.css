@@ -34,12 +34,13 @@
   --text-h1--line-height: 36px;
   --text-h2: 22px;
   --text-h2--line-height: 30px;
-  --text-h3: 18px;
-  --text-h3--line-height: 26px;
-  --text-body: 16px;
-  --text-body--line-height: 24px;
-  --text-small: 14px;
-  --text-small--line-height: 20px;
+  /*  huruf diperbesar untuk dosen senior (body 16->18, small 14->16, h3 18->20) */
+  --text-h3: 20px;
+  --text-h3--line-height: 28px;
+  --text-body: 18px;
+  --text-body--line-height: 28px;
+  --text-small: 16px;
+  --text-small--line-height: 24px;
   --text-score-lg: 40px;
   --text-score-lg--line-height: 48px;
   --text-score-md: 24px;
@@ -63,8 +64,8 @@ html {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-body);
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 18px;
+  line-height: 28px;
   -webkit-text-size-adjust: 100%;
 }
 

@@ -2,6 +2,8 @@
 .venv/
 venv/
 
+
+
 # Python cache
 __pycache__/
 *.py[cod]
@@ -13,4 +15,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+tests/
 

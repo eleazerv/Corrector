@@ -10,8 +10,7 @@ __all__ = [
 
 def get_ocr_provider() -> OcrProvider:
     """
-    Pilih provider dari OCR_PROVIDER di .env: local | api | fake.
-    Import dilakukan DI DALAM cabang, supaya mode api/fake tidak memuat torch.
+    Pilih provider dari OCR_PROVIDER di .env:  api | fake.
     """
     provider = settings.OCR_PROVIDER.lower()
 

@@ -1,91 +1,105 @@
 "use client";
-
+// detail nilai mahasiswa (GET /me/tests/{id}). Hanya data yang aman untuk mahasiswa:
+// nilai, foto jawabannya sendiri dengan kotak bukti, dan umpan balik per bagian (tanpa rubrik dosen).
 import Link from "next/link";
-import { FileText } from "lucide-react";
-import { useData } from "@/lib/store";
-import { formatDateLong } from "@/lib/grading";
-import { ComplaintBadge } from "@/components/ui/badge";
+import { useState } from "react";
+import { MessageSquareWarning } from "lucide-react";
+import type { MyTestDetail } from "@/lib/backend-types";
+import { dateLong, num, score } from "@/lib/format";
+import { useApi } from "@/lib/use-api";
+import { Badge, ComplaintBadge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/panels";
-import { GradeSheet } from "./grade-sheet";
-
-export function usePublishedResult(examId: string) {
-  const { data } = useData();
-  const exam = data.exams.find((e) => e.id === examId);
-  const sub = data.submissions.find(
-    (s) => s.examId === examId && s.studentId === data.currentStudentId && s.status === "published",
-  );
-  const cls = exam && data.classes.find((c) => c.id === exam.classId);
-  return exam && sub && cls ? { exam, sub, cls } : null;
-}
-
-export function deadlinePassed(deadline?: string) {
-  return Boolean(deadline && Date.now() > new Date(deadline).getTime());
-}
+import { LoadError, Loading } from "@/components/ui/state";
+import { AnswerPhoto } from "@/components/dosen/answer-photo";
 
 export function StudentGrade({ examId }: { examId: string }) {
-  const { data } = useData();
-  const result = usePublishedResult(examId);
+  const detail = useApi<MyTestDetail>(`/me/tests/${examId}`);
+  const [focus, setFocus] = useState<number | null>(null);
 
-  if (!result) {
-    return (
-      <EmptyState icon={FileText} title="Nilai ini belum tersedia." action={<ButtonLink href="/mahasiswa">Kembali ke Nilai Saya</ButtonLink>}>
-        Nilai hanya bisa dilihat setelah dosen mempublikasikannya.
-      </EmptyState>
-    );
-  }
-  const { exam, sub, cls } = result;
-  const complaints = data.complaints.filter((c) => c.examId === exam.id && c.studentId === data.currentStudentId);
-  const closed = deadlinePassed(exam.complaintDeadline);
+  if (detail.loading && !detail.data) return <Loading text="Memuat nilai…" />;
+  if (detail.error || !detail.data) return <LoadError title="Nilai tidak bisa dibuka." message={detail.error ?? ""} onRetry={detail.reload} />;
+  const d = detail.data;
+  const boxes = d.answers.filter((a) => focus === null || a.number === focus).flatMap((a) => a.bbox);
+  const complaintFor = (id: string | null) => d.complaints.find((c) => c.test_answer_id === id);
 
   return (
-    <div>
-      <nav aria-label="Breadcrumb" className="mb-4 text-small">
-        <Link href="/mahasiswa" className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline">
-          Nilai Saya
-        </Link>
-        <span className="mx-2 text-text-muted">/</span>
-        <span className="text-text-muted">{exam.title}</span>
-      </nav>
-      <GradeSheet
-        exam={exam}
-        cls={cls}
-        submission={sub}
-        footer={
-          <div className="space-y-4">
-            {complaints.length > 0 && (
-              <div>
-                <p className="font-semibold">Keberatan Anda untuk ujian ini</p>
-                <ul className="mt-2 space-y-2">
-                  {complaints.map((c) => (
-                    <li key={c.id} className="flex flex-wrap items-center gap-2">
-                      <span>Soal {exam.questions.find((q) => q.id === c.questionId)?.number}</span>
-                      <ComplaintBadge status={c.status} />
-                      <Link href="/mahasiswa/keberatan" className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline">
-                        Lihat detail
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {closed ? (
-              <p className="text-text-muted">
-                Batas pengajuan keberatan sudah lewat ({formatDateLong(exam.complaintDeadline!)}).
-              </p>
-            ) : (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                {exam.complaintDeadline && (
-                  <p className="text-small text-text-muted">Batas pengajuan: {formatDateLong(exam.complaintDeadline)}</p>
+    <article className="space-y-6">
+      <header className="doc-rule rounded-md border border-border bg-surface px-5 py-6 text-center sm:px-8">
+        <h1 className="text-h1">{d.test_name}</h1>
+        <p className="mt-1 text-text-muted">{d.subject_name}</p>
+        <p className="tabular mt-5 text-score-lg font-bold text-primary">{score(d.total_grade, d.max_score)}</p>
+        <p className="mt-1 text-small text-text-muted">Diumumkan {dateLong(d.published_at)}</p>
+      </header>
+
+      <section aria-labelledby="foto">
+        <h2 id="foto" className="mb-2 text-h2">
+          Lembar jawaban Anda
+        </h2>
+        {focus !== null && (
+          <p className="mb-2 text-small">
+            Menampilkan kotak untuk soal {focus}.{" "}
+            <button type="button" className="font-semibold text-primary underline" onClick={() => setFocus(null)}>
+              Tampilkan semua
+            </button>
+          </p>
+        )}
+        <AnswerPhoto pages={d.pages} boxes={boxes} />
+      </section>
+
+      <section aria-labelledby="per-soal">
+        <h2 id="per-soal" className="mb-3 text-h2">
+          Nilai per soal
+        </h2>
+        <ol className="space-y-4">
+          {d.answers.map((a) => {
+            const complaint = complaintFor(a.test_answer_id);
+            return (
+              <li key={a.number} className="rounded-md border border-border bg-surface p-4 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <h3 className="text-h3 font-bold">Soal {a.number}</h3>
+                  <span className="tabular text-score-md font-bold">{score(a.grade, a.max_points)}</span>
+                </div>
+                <p className="mt-1 text-text-muted">{a.question_text}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {a.adjusted_by_teacher && <Badge tone="info">Nilai disesuaikan dosen</Badge>}
+                  {complaint && <ComplaintBadge status={complaint.status} />}
+                </div>
+                {a.student_feedback.summary && <p className="mt-3">{a.student_feedback.summary}</p>}
+                {a.student_feedback.points.length > 0 && (
+                  <ul className="mt-3 space-y-2">
+                    {a.student_feedback.points.map((p) => (
+                      <li key={p.no} className="flex items-start justify-between gap-3 rounded-md bg-bg px-3 py-2">
+                        <span>{p.feedback}</span>
+                        <span className="tabular shrink-0 font-semibold">
+                          {num(p.points)} / {num(p.max_points)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-                <ButtonLink href={`/mahasiswa/nilai/${exam.id}/keberatan`} className="w-full sm:w-auto">
-                  Ajukan Keberatan Nilai
-                </ButtonLink>
-              </div>
-            )}
-          </div>
-        }
-      />
-    </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {a.bbox.length > 0 && (
+                    <button type="button" className="min-h-11 px-2 font-semibold text-primary underline underline-offset-4" onClick={() => setFocus(a.number)}>
+                      Tunjukkan di foto
+                    </button>
+                  )}
+                  {a.test_answer_id && !complaint && (
+                    <ButtonLink compact icon={MessageSquareWarning} href={`/mahasiswa/nilai/${d.student_test_id}/keberatan?soal=${a.test_answer_id}`}>
+                      Ajukan keberatan
+                    </ButtonLink>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <p>
+        <Link href="/mahasiswa" className="font-semibold text-primary underline underline-offset-4">
+          Kembali ke Nilai Saya
+        </Link>
+      </p>
+    </article>
   );
 }

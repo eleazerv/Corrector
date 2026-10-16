@@ -1,0 +1,2 @@
+# Hanya untuk menjalankan tes (CI / lokal). Tidak dipakai di server.
+pytest>=8,<10

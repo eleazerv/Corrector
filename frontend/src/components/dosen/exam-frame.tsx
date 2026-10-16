@@ -1,16 +1,25 @@
 "use client";
+// Kerangka halaman 1 ujian (id di URL = class_test id).
+// Mengambil GET /class-tests/{id} + GET /tests/{test_id}, lalu dibagikan ke halaman anak lewat useExam().
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, type ReactNode } from "react";
-import { useData } from "@/lib/store";
-import { examMax } from "@/lib/grading";
-import type { ClassRoom, Exam } from "@/lib/types";
-import { PageHeader } from "@/components/ui/page";
+import type { ClassTestDetail, TestDetail } from "@/lib/backend-types";
+import { date, TEST_TYPES } from "@/lib/format";
+import { useApi } from "@/lib/use-api";
+import { ClassTestBadge } from "@/components/ui/badge";
+import { Container, PageHeader } from "@/components/ui/page";
+import { LoadError, Loading } from "@/components/ui/state";
 import { Stepper } from "@/components/ui/stepper";
-import { MissingState } from "./not-found-state";
+import Link from "next/link";
 
-const ExamContext = createContext<{ exam: Exam; cls: ClassRoom } | null>(null);
+interface ExamCtx {
+  ct: ClassTestDetail;
+  test: TestDetail;
+  reload: () => void;
+}
+
+const ExamContext = createContext<ExamCtx | null>(null);
 
 export function useExam() {
   const ctx = useContext(ExamContext);
@@ -18,54 +27,94 @@ export function useExam() {
   return ctx;
 }
 
-const SECTIONS = [
-  { slug: "rubrik", label: "Soal & Rubrik" },
-  { slug: "unggah", label: "Unggah Jawaban" },
-  { slug: "review", label: "Review" },
-  { slug: "publikasi", label: "Publikasi" },
-];
-
 export function ExamFrame({ examId, children }: { examId: string; children: ReactNode }) {
-  const { data } = useData();
   const path = usePathname();
-  const exam = data.exams.find((e) => e.id === examId);
-  const cls = exam && data.classes.find((c) => c.id === exam.classId);
-  if (!exam || !cls) return <MissingState what="Ujian" back="/dosen/kelas" backLabel="Kembali ke daftar kelas" />;
+  const ct = useApi<ClassTestDetail>(`/class-tests/${examId}`);
+  const test = useApi<TestDetail>(ct.data ? `/tests/${ct.data.test_id}` : null);
 
-  const current = SECTIONS.find((s) => path.endsWith(`/${s.slug}`));
-  const wide = current?.slug === "review";
+  if ((ct.loading && !ct.data) || (test.loading && !test.data)) return <Loading text="Memuat ujian…" />;
+  if (ct.error || test.error || !ct.data || !test.data)
+    return (
+      <Container>
+        <LoadError
+          title="Ujian tidak bisa dibuka."
+          message={ct.error ?? test.error ?? "Ujian tidak ditemukan."}
+          onRetry={() => {
+            ct.reload();
+            test.reload();
+          }}
+        />
+      </Container>
+    );
+
+  const c = ct.data;
+  const t = test.data;
+  const base = `/dosen/ujian/${c.id}`;
+  const hasQuestions = t.questions.length > 0;
+  const status = c.status;
+  const steps = [
+    {
+      href: `${base}/rubrik`,
+      label: "Soal & Kunci",
+      // selesai = soal ada + ditandai lengkap (status 'ready')
+      hint: !hasQuestions ? "Belum ada soal" : t.status === "ready" ? `${t.questions.length} soal, lengkap` : `${t.questions.length} soal, belum ditandai lengkap`,
+      done: hasQuestions && t.status === "ready",
+    },
+    {
+      href: `${base}/unggah`,
+      label: "Unggah Jawaban",
+      hint: status === "scheduled" ? "Belum ada foto" : "Foto sudah masuk",
+      done: status !== "scheduled",
+    },
+    {
+      href: `${base}/review`,
+      label: "Periksa Nilai",
+      hint: status === "reviewing" ? "Siap diperiksa" : status === "published" ? "Selesai" : "Tunggu AI selesai",
+      done: status === "published",
+    },
+    {
+      href: `${base}/publikasi`,
+      label: "Umumkan",
+      hint: status === "published" ? `Diumumkan` : "Kirim nilai ke mahasiswa",
+      done: status === "published",
+    },
+  ].map((s) => ({ ...s, active: path.startsWith(s.href) }));
+  const wide = path.endsWith("/review");
+  const typeLabel = TEST_TYPES.find((x) => x.id === t.test_type)?.label ?? t.test_type;
 
   return (
-    <ExamContext.Provider value={{ exam, cls }}>
+    <ExamContext.Provider
+      value={{
+        ct: c,
+        test: t,
+        reload: () => {
+          ct.reload();
+          test.reload();
+        },
+      }}
+    >
       <div className={wide ? "w-full" : "mx-auto w-full max-w-[1200px]"}>
         <PageHeader
           crumbs={[
-            { href: "/dosen", label: "Dashboard" },
-            { href: `/dosen/kelas/${cls.id}`, label: cls.name },
-            { label: exam.title },
+            { href: "/dosen", label: "Beranda" },
+            { href: `/dosen/kelas/${c.class_id}`, label: c.class_name },
+            { label: c.test_name },
           ]}
-          title={exam.title}
-          meta={`${cls.code} • ${cls.period} • Nilai maksimum ${examMax(exam)}`}
-        >
-          <Stepper stage={exam.stage} />
-        </PageHeader>
-        <nav aria-label="Bagian ujian" className="-mt-4 mb-8 grid grid-cols-2 border-b border-border sm:flex">
-          {SECTIONS.map((s) => {
-            const active = s === current;
-            return (
-              <Link
-                key={s.slug}
-                href={`/dosen/ujian/${exam.id}/${s.slug}`}
-                aria-current={active ? "page" : undefined}
-                className={`-mb-px inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap border-b-2 px-4 sm:justify-start font-semibold ${
-                  active ? "border-primary text-primary" : "border-transparent text-text-muted hover:text-text"
-                }`}
-              >
-                {s.label}
+          title={c.test_name}
+          meta={
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                {t.subject_name} • {typeLabel} • Nilai maksimal {t.max_score} • {date(c.test_date)}
+              </span>
+              <ClassTestBadge status={c.status} />
+              <Link href={`${base}/kalibrasi`} className="text-small text-primary underline underline-offset-4">
+                Uji akurasi AI
               </Link>
-            );
-          })}
-        </nav>
+            </span>
+          }
+        >
+          <Stepper steps={steps} />
+        </PageHeader>
         {children}
       </div>
     </ExamContext.Provider>
