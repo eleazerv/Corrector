@@ -1,9 +1,10 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 /**
- * Navy top bar (design.md §4.2). Logo is the product name set in the heading serif and the
- * institution name is a visible placeholder until the real one is configured.
+ * Navy top bar (design.md §4.2). Logo is the BeeCorrect hexagon icon plus the wordmark as text,
+ * because the wordmark PNG has a solid white background that doesn't sit on navy.
  */
 export function TopBar({
   home,
@@ -28,8 +29,11 @@ export function TopBar({
       </a>
       <div className="flex min-h-16 items-center gap-3 px-4 sm:px-8">
         {leading}
-        <Link href={home} className="font-heading text-h2 leading-none">
-          Corrector
+        <Link href={home} className="flex items-center gap-2 font-heading text-h2 leading-none">
+          <Image src="/beecorrect-icon.png" alt="" width={28} height={32} priority />
+          <span>
+            <span className="text-bee">Bee</span>Correct
+          </span>
         </Link>
         {children && <div className="ml-4 hidden flex-1 sm:flex">{children}</div>}
         <div className="ml-auto flex items-center gap-2 sm:gap-4">

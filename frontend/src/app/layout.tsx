@@ -8,7 +8,7 @@ const sans = Source_Sans_3({ variable: "--font-source-sans", subsets: ["latin"],
 const mono = Source_Code_Pro({ variable: "--font-source-code", subsets: ["latin"], weight: ["400"] });
 
 export const metadata: Metadata = {
-  title: "Corrector: Penilaian Ujian",
+  title: "BeeCorrect: Penilaian Ujian",
   description: "Penilaian jawaban ujian dengan saran AI yang direview dan diputuskan oleh dosen.",
 };
 
