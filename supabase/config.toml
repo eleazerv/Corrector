@@ -118,6 +118,11 @@ enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
+# bucket foto lembar jawaban (SUPABASE_BUCKET); batasnya sama dengan MAX_IMAGE_BYTES di backend/modules/shared.py
+[storage.buckets.joints-uploads]
+public = false
+file_size_limit = "10MiB"
+
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]
 # public = false

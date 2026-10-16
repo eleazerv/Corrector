@@ -146,8 +146,8 @@ npx supabase status
 | Publishable key / anon key | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (frontend) |
 | Studio URL (`http://127.0.0.1:54323`) | dashboard database |
 
-**Buat bucket Storage** (sekali saja): buka Studio → **Storage** → **New bucket** → beri nama
-(mis. `answer-sheets`), biarkan **Public = off**. Nama ini diisi ke `SUPABASE_BUCKET`.
+Bucket Storage `joints-uploads` (private, maks 10 MB per file) dibuat otomatis dari `supabase/config.toml`.
+Nama ini diisi ke `SUPABASE_BUCKET`.
 
 ### Langkah 3. Isi environment backend
 
@@ -161,7 +161,7 @@ ENV=development
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
 SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_KEY=<secret / service_role key>
-SUPABASE_BUCKET=answer-sheets
+SUPABASE_BUCKET=joints-uploads
 SUPABASE_PUBLIC_URL=http://127.0.0.1:54321
 
 REDIS_URL=redis://localhost:6379
@@ -392,15 +392,13 @@ Setelah tersimpan, owner menghapus `gha_key` dari laptopnya.
 cd ~/Corrector
 npx supabase start
 npx supabase status      # catat Secret key dan Publishable key
-docker exec supabase_db_JOINTS psql -U postgres -c \
-  "insert into storage.buckets (id, name, public) values ('answer-sheets', 'answer-sheets', false) on conflict do nothing;"
 ```
 
 Buat `backend/.env.docker`: isi seperti template **Langkah 3**, dengan alamat Supabase dari **Opsi A1**.
 Buat `.env` root seperti **Opsi A2**. Bedanya hanya alamat VM:
 
 ```env
-SUPABASE_BUCKET=answer-sheets
+SUPABASE_BUCKET=joints-uploads
 SUPABASE_PUBLIC_URL=http://<ip-vm>
 CORS_ORIGINS=["http://<ip-vm>"]
 ```
