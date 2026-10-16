@@ -31,7 +31,6 @@ export function TopBar({
         <Link href={home} className="font-heading text-h2 leading-none">
           Corrector
         </Link>
-        <span className="hidden border-l border-white/40 pl-3 text-small text-white/90 md:inline">[Nama Institusi]</span>
         {children && <div className="ml-4 hidden flex-1 sm:flex">{children}</div>}
         <div className="ml-auto flex items-center gap-2 sm:gap-4">
           <span className="hidden text-right text-small leading-tight md:block">
